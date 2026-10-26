@@ -18,12 +18,16 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   ),
 });
 
+// La hoja de reporte se descarga solo cuando alguien la abre.
+const ReportSheet = dynamic(() => import("@/components/ReportSheet"), { ssr: false });
+
 type Status = "idle" | "locating" | "denied" | "unavailable" | "outside";
 
 export default function HomeClient() {
   const selectedCell = useZone();
   const hasConsent = useLocationConsent();
   const [consentOpen, setConsentOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
 
   const pickCell = useCallback((cell: string) => {
@@ -111,6 +115,13 @@ export default function HomeClient() {
         <div className="flex min-h-11 flex-wrap gap-2">
           <button
             type="button"
+            onClick={() => setReportOpen(true)}
+            className="min-h-11 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white"
+          >
+            {es.report.open}
+          </button>
+          <button
+            type="button"
             onClick={onUseLocation}
             disabled={status === "locating"}
             className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -142,6 +153,7 @@ export default function HomeClient() {
       </section>
 
       <LocationConsent open={consentOpen} onAccept={accept} onDecline={decline} />
+      {reportOpen && <ReportSheet zone={selectedCell} onClose={() => setReportOpen(false)} />}
     </div>
   );
 }
