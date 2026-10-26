@@ -1,0 +1,1 @@
+-- Datos de desarrollo local (se aplica en supabase db reset). Los sectores reales llegan en una tarea posterior.
