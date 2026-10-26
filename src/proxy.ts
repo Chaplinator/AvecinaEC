@@ -17,7 +17,8 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: "/((?!api|_next/static|_next/image|favicon.ico).*)",
+      // Las teselas (/tiles) son binarios estáticos: sin proxy ni nonce, se sirven directo del CDN.
+      source: "/((?!api|tiles/|_next/static|_next/image|favicon.ico).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
