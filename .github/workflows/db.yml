@@ -53,12 +53,12 @@ jobs:
         env:
           U: ${{ secrets.SUPABASE_DB_URL }}
         run: |
+          # Falla en rojo: un verde sin migrar dejaría la base desactualizada sin que nadie lo note.
           if [ -z "$U" ]; then
-            echo "::warning::Falta el secreto SUPABASE_DB_URL; no se aplican migraciones."
-            echo "listo=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "listo=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Falta el secreto SUPABASE_DB_URL; las migraciones NO se aplicaron."
+            exit 1
           fi
+          echo "listo=true" >> "$GITHUB_OUTPUT"
       - name: Ver qué migraciones se aplicarían
         if: steps.secreto.outputs.listo == 'true'
         env:
