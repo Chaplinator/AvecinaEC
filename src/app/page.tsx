@@ -1,9 +1,8 @@
-import { Suspense } from "react";
 import { connection } from "next/server";
 import { es } from "@/i18n/es";
 
 // El CSP con nonce exige renderizado dinámico: el nonce se aplica por petición.
-async function Content() {
+export default async function Home() {
   await connection();
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
@@ -13,13 +12,5 @@ async function Content() {
         {es.app.unofficial} {es.app.emergency}
       </p>
     </main>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense>
-      <Content />
-    </Suspense>
   );
 }

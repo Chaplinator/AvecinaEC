@@ -8,8 +8,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Sin cacheComponents/PPR: el shell estático no lleva nonce y el CSP bloquearía todo el JS.
   // Sin source maps públicos; los de Sentry se suben en privado durante el build.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,

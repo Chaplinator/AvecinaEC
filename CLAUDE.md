@@ -174,6 +174,7 @@ Parametrizable en una tabla `config` (no hardcodear umbrales):
 ### Aplicación
 - Validación con Zod de todo input en el servidor (tipos, rangos, longitudes, enums).
 - Headers de seguridad: CSP estricta (con nonce), HSTS, `X-Content-Type-Options`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (solo geolocalización y cámara cuando se usen), `frame-ancestors 'none'`.
+- CSP con nonce implica HTML renderizado por petición (sin `cacheComponents` ni PPR: el shell estático no lleva nonce y el CSP bloquea todo el JS). Verificar siempre en un navegador real, no solo con build y tests. El HTML no se cachea en CDN; el rendimiento depende del Service Worker y de que los datos del mapa vengan de `/api/v1/map` cacheado.
 - Fotos: límite 5 MB, solo JPEG/PNG/WebP, **eliminar metadatos EXIF** (incluyen GPS exacto), recomprimir en servidor, URLs firmadas con expiración. Moderación automática básica antes de publicar.
 - Sin secretos en el repositorio. `.env*` en `.gitignore`. Escaneo de secretos en CI (gitleaks o GitHub secret scanning).
 - Dependencias: Dependabot o Renovate, `npm audit` en CI, lockfile versionado. Revisar antes de agregar cualquier librería nueva.
