@@ -1,7 +1,7 @@
 -- Pruebas de estructura: RLS activo, indices, checks, trigger, siembra de config, privilegios por columna.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(23);
 
 -- 1-4. RLS activo
 select ok((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), 'RLS activo en profiles');
@@ -57,6 +57,16 @@ select throws_ok(
   $$insert into public.reports (user_id, type, status_value, h3_cell, provider, source, client_request_id)
     values ('00000000-0000-0000-0000-0000000000a1', 'internet', 'out', '8828308281fffff', 'netlife', 'manual', '11111111-1111-1111-1111-111111111111')$$,
   '23505', null, '(user_id, client_request_id) duplicado falla');
+
+select throws_ok(
+  $$insert into public.reports (user_id, type, status_value, h3_cell, source, client_request_id)
+    values ('00000000-0000-0000-0000-0000000000a1', 'power', 'out', '8a28308281fffff', 'manual', gen_random_uuid())$$,
+  '23514', null, 'h3 de resolucion 10 solo se admite para inundacion');
+
+select throws_ok(
+  $$insert into public.reports (user_id, type, status_value, h3_cell, source, client_request_id)
+    values ('00000000-0000-0000-0000-0000000000a1', 'power', 'out', '8428308281fffff', 'manual', gen_random_uuid())$$,
+  '23514', null, 'h3 de otra resolucion (4) falla');
 
 -- 16-17. Siembra de config
 select is((select count(*)::int from public.config), 14, 'config tiene las 14 filas sembradas');

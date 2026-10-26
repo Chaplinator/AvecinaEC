@@ -17,7 +17,7 @@ create table public.profiles (
   phone_verified boolean not null default false,
   trust_score    integer not null default 50 check (trust_score between 0 and 100),
   is_banned      boolean not null default false,
-  locale         text not null default 'es' check (char_length(locale) between 2 and 10)
+  locale         text not null default 'es' check (locale ~ '^[a-z]{2}(-[A-Z]{2})?$')
 );
 
 alter table public.profiles enable row level security;
@@ -100,7 +100,8 @@ create table public.reports (
   user_id           uuid not null references auth.users (id) on delete cascade,
   type              text not null check (type in ('power', 'water', 'internet', 'flood')),
   status_value      text not null check (status_value in ('out', 'back', 'flood_level')),
-  h3_cell           text not null check (h3_cell ~ '^[0-9a-f]{15}$'),
+  -- H3 resolucion 8 ('88...') en general; resolucion 10 ('8a...') solo para inundacion (calle, CLAUDE.md 6).
+  h3_cell           text not null check (h3_cell ~ '^(88|8a)[0-9a-f]{13}$'),
   provider          text check (provider in ('netlife', 'cnt', 'claro', 'xtrim', 'otro')),
   photo_path        text check (char_length(photo_path) <= 500),
   created_at        timestamptz not null default now(),
@@ -108,7 +109,8 @@ create table public.reports (
   client_request_id uuid not null,
   constraint reports_user_request_unique unique (user_id, client_request_id),
   constraint reports_provider_only_internet check (provider is null or type = 'internet'),
-  constraint reports_photo_only_flood check (photo_path is null or type = 'flood')
+  constraint reports_photo_only_flood check (photo_path is null or type = 'flood'),
+  constraint reports_h3_res10_only_flood check (left(h3_cell, 2) <> '8a' or type = 'flood')
 );
 
 alter table public.reports enable row level security;
