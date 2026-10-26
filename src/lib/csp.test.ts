@@ -35,6 +35,14 @@ describe("csp", () => {
     expect(buildCsp("n", false, origins)).not.toContain("*");
   });
 
+  it("rechaza esquemas que no son https (salvo http en localhost)", () => {
+    expect(connectOrigins({ NEXT_PUBLIC_SENTRY_DSN: "javascript:alert(1)" })).toEqual([]);
+    expect(connectOrigins({ NEXT_PUBLIC_SENTRY_DSN: "http://pub@evil.test/1" })).toEqual([]);
+    expect(connectOrigins({ NEXT_PUBLIC_SENTRY_DSN: "http://pub@localhost:9999/1" })).toEqual([
+      "http://localhost:9999",
+    ]);
+  });
+
   it("ignora valores inválidos", () => {
     expect(connectOrigins({ NEXT_PUBLIC_SENTRY_DSN: "no-es-url" })).toEqual([]);
   });

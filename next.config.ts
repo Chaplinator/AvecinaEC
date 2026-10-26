@@ -36,4 +36,6 @@ export default withSentryConfig(nextConfig, {
   silent: !process.env.CI,
   telemetry: false,
   widenClientFileUpload: true,
+  // El valor por defecto del SDK es NO borrar (pese a lo que dicen sus tipos): forzarlo.
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
 });

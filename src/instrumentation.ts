@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { scrubEvent, sentryDataCollection } from "@/lib/sentry-scrub";
+import { scrubBreadcrumb, scrubEvent, sentryDataCollection } from "@/lib/sentry-scrub";
 
 export function register() {
   const dsn = process.env.SENTRY_DSN;
@@ -7,7 +7,9 @@ export function register() {
     dsn,
     enabled: Boolean(dsn),
     dataCollection: { ...sentryDataCollection, httpBodies: [] },
-    tracesSampleRate: 0.05,
+    // Sin tracing hasta que haga falta: las transacciones y spans no pasan por scrubEvent.
+    tracesSampleRate: 0,
+    beforeBreadcrumb: scrubBreadcrumb,
     beforeSend: scrubEvent,
   });
 }

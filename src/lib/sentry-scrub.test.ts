@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ErrorEvent } from "@sentry/browser";
-import { scrubEvent, sentryDataCollection } from "./sentry-scrub";
+import { scrubBreadcrumb, scrubEvent, sentryDataCollection } from "./sentry-scrub";
 
 describe("scrubEvent", () => {
   it("elimina usuario, cookies, headers, cuerpo y query", () => {
@@ -36,5 +36,23 @@ describe("sentryDataCollection", () => {
     expect(sentryDataCollection.httpHeaders).toBe(false);
     expect(sentryDataCollection.httpBodies).toEqual([]);
     expect(sentryDataCollection.urlQueryParams).toBe(false);
+    expect(sentryDataCollection.stackFrameVariables).toBe(false);
+    expect(sentryDataCollection.databaseQueryData).toBe(false);
+    expect(sentryDataCollection.queues).toBe(false);
+  });
+});
+
+describe("scrubBreadcrumb", () => {
+  it("descarta los breadcrumbs de consola", () => {
+    expect(scrubBreadcrumb({ category: "console", message: "texto de usuario" })).toBeNull();
+  });
+
+  it("quita query y hash de las URLs", () => {
+    const out = scrubBreadcrumb({
+      category: "fetch",
+      data: { url: "https://x.test/rest/v1/reports?user_id=eq.123#a", method: "GET" },
+    });
+    expect(out?.data?.url).toBe("https://x.test/rest/v1/reports");
+    expect(out?.data?.method).toBe("GET");
   });
 });

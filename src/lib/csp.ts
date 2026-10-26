@@ -5,7 +5,11 @@ export function generateNonce(): string {
 function originOf(url: string | undefined): string | null {
   if (!url) return null;
   try {
-    return new URL(url).origin;
+    const u = new URL(url);
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+    // Solo https; http únicamente para localhost (desarrollo y pruebas).
+    if (u.protocol === "https:" || (u.protocol === "http:" && local)) return u.origin;
+    return null;
   } catch {
     return null;
   }
