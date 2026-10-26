@@ -21,7 +21,8 @@ export type Deps = {
   clientKey(request: Request): string;
   limitIp(key: string): Promise<LimitResult>;
   limitUser(userId: string): Promise<LimitResult>;
-  ensureSession(request: NextRequest): Promise<{ userId: string; tokens: SessionTokens | null }>;
+  // Crea una sesión anónima solo si hace falta; si la IP ya creó demasiadas, lanza RateLimitedError.
+  ensureSession(request: NextRequest, ipKey: string): Promise<{ userId: string; tokens: SessionTokens | null }>;
   seenRequest(userId: string, clientRequestId: string): Promise<boolean>;
   markRequest(userId: string, clientRequestId: string): Promise<void>;
   claimSlot(userId: string, type: string, cell: string): Promise<boolean>;
@@ -32,6 +33,12 @@ export type Deps = {
 };
 
 export class ServiceUnavailableError extends Error {}
+
+export class RateLimitedError extends Error {
+  constructor(public retryAfter: number) {
+    super("Límite de frecuencia");
+  }
+}
 
 export const MAX_BODY_BYTES = 2048;
 // Un reporte por tipo y celda cada 10 minutos (CLAUDE.md §12).
@@ -47,9 +54,23 @@ export function createReportsHandler(deps: Deps) {
       if (!isJsonRequest(request)) {
         return errorResponse(400, "BAD_REQUEST", "El formato de la solicitud no es válido.", requestId);
       }
+      // Si el cliente declara un cuerpo enorme, se corta antes de leerlo.
+      const declared = Number(request.headers.get("content-length") ?? 0);
+      if (declared > MAX_BODY_BYTES) {
+        return errorResponse(413, "PAYLOAD_TOO_LARGE", "La solicitud es demasiado grande.", requestId);
+      }
+
+      // 1. Límite por IP, antes de leer el cuerpo y de tocar nada costoso (sesiones, base de datos).
+      const ipKey = deps.clientKey(request);
+      const ip = await deps.limitIp(ipKey);
+      if (!ip.ok) {
+        return errorResponse(429, "RATE_LIMITED", "Demasiadas solicitudes. Intenta más tarde.", requestId, {
+          retryAfter: ip.retryAfter,
+        });
+      }
 
       const text = await request.text();
-      if (text.length > MAX_BODY_BYTES) {
+      if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
         return errorResponse(413, "PAYLOAD_TOO_LARGE", "La solicitud es demasiado grande.", requestId);
       }
       let raw: unknown;
@@ -57,14 +78,6 @@ export function createReportsHandler(deps: Deps) {
         raw = JSON.parse(text);
       } catch {
         return errorResponse(400, "BAD_REQUEST", "El formato de la solicitud no es válido.", requestId);
-      }
-
-      // 1. Límite por IP, antes de tocar nada costoso (sesiones, base de datos).
-      const ip = await deps.limitIp(deps.clientKey(request));
-      if (!ip.ok) {
-        return errorResponse(429, "RATE_LIMITED", "Demasiadas solicitudes. Intenta más tarde.", requestId, {
-          retryAfter: ip.retryAfter,
-        });
       }
 
       // 2. Validación estricta.
@@ -76,23 +89,26 @@ export function createReportsHandler(deps: Deps) {
       const input = parsed.data;
 
       // 3. Sesión anónima (se crea sola en el primer reporte: no hay registro).
-      const { userId, tokens } = await deps.ensureSession(request);
+      const { userId, tokens } = await deps.ensureSession(request, ipKey);
       const done = (status: number, outcome: "created" | "duplicate") => {
         const response = jsonResponse(status, { status: outcome }, requestId);
         if (tokens) deps.applySession(response, tokens);
         return response;
       };
 
-      // 4. Idempotencia: el mismo client_request_id ya guardado responde bien sin repetir nada.
-      if (await deps.seenRequest(userId, input.client_request_id)) return done(200, "duplicate");
-
-      // 5. Límite por usuario y límite de un reporte por tipo y celda.
-      const user = await deps.limitUser(userId);
+      // 4. Idempotencia y límite por usuario en paralelo (un solo viaje de espera a Redis).
+      const [seen, user] = await Promise.all([
+        deps.seenRequest(userId, input.client_request_id),
+        deps.limitUser(userId),
+      ]);
+      if (seen) return done(200, "duplicate");
       if (!user.ok) {
         return errorResponse(429, "RATE_LIMITED", "Hiciste muchos reportes seguidos.", requestId, {
           retryAfter: user.retryAfter,
         });
       }
+
+      // 5. Un reporte por tipo y celda cada 10 minutos.
       const claimed = await deps.claimSlot(userId, input.type, input.h3_cell);
       if (!claimed) {
         return errorResponse(429, "RATE_LIMITED", "Ya reportaste esto en tu zona hace poco.", requestId, {
@@ -119,6 +135,11 @@ export function createReportsHandler(deps: Deps) {
       await deps.markRequest(userId, input.client_request_id).catch(() => undefined);
       return done(outcome === "created" ? 201 : 200, outcome);
     } catch (error) {
+      if (error instanceof RateLimitedError) {
+        return errorResponse(429, "RATE_LIMITED", "Demasiadas solicitudes. Intenta más tarde.", requestId, {
+          retryAfter: error.retryAfter,
+        });
+      }
       deps.logError(requestId, error);
       if (error instanceof ServiceUnavailableError) {
         return errorResponse(503, "SERVICE_UNAVAILABLE", "Servicio no disponible por un momento.", requestId, {

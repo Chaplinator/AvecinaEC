@@ -19,6 +19,20 @@ describe("api helpers", () => {
     expect(isJsonRequest(req({}))).toBe(false);
   });
 
+  it("clientKey prefiere la cabecera que fija Vercel sobre la que el cliente podría mandar", () => {
+    const vercel = clientKey(req({ "x-vercel-forwarded-for": "190.15.1.2", "x-forwarded-for": "6.6.6.6" }), "s");
+    const real = clientKey(req({ "x-forwarded-for": "190.15.1.2" }), "s");
+    const spoof = clientKey(req({ "x-vercel-forwarded-for": "190.15.1.2", "x-real-ip": "9.9.9.9" }), "s");
+    expect(vercel).toBe(real);
+    expect(spoof).toBe(real);
+  });
+
+  it("isSameOrigin rechaza sec-fetch-site distinto de same-origin", () => {
+    expect(isSameOrigin(req({ origin: "https://app.test", "sec-fetch-site": "same-origin" }))).toBe(true);
+    expect(isSameOrigin(req({ origin: "https://app.test", "sec-fetch-site": "cross-site" }))).toBe(false);
+    expect(isSameOrigin(req({ origin: "https://app.test", "sec-fetch-site": "same-site" }))).toBe(false);
+  });
+
   it("clientKey es estable, no revela la IP y depende del secreto", () => {
     const a = clientKey(req({ "x-forwarded-for": "190.15.1.2, 10.0.0.1" }), "secreto");
     const b = clientKey(req({ "x-forwarded-for": "190.15.1.2" }), "secreto");

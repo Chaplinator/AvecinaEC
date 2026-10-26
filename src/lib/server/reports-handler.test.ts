@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { latLngToCell } from "h3-js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  RateLimitedError,
   ServiceUnavailableError,
   createReportsHandler,
   type Deps,
@@ -101,6 +102,55 @@ describe("POST /api/v1/reports", () => {
   it("rechaza cuerpos demasiado grandes", async () => {
     const res = await createReportsHandler(makeDeps())(post(validBody({ relleno: "x".repeat(3000) })));
     expect(res.status).toBe(413);
+  });
+
+  it("rechaza un envío declarado como cross-site aunque el Origin coincida", async () => {
+    const deps = makeDeps();
+    const res = await createReportsHandler(deps)(
+      post(validBody(), { origin: "https://app.test", "content-type": "application/json", "sec-fetch-site": "cross-site" }),
+    );
+    expect(res.status).toBe(403);
+    expect(deps.limitIp).not.toHaveBeenCalled();
+  });
+
+  it("acepta sec-fetch-site: same-origin", async () => {
+    const res = await createReportsHandler(makeDeps())(
+      post(validBody(), { origin: "https://app.test", "content-type": "application/json", "sec-fetch-site": "same-origin" }),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("mide el cuerpo en bytes, no en caracteres", async () => {
+    // 1.500 caracteres de 2 bytes = 3.000 bytes: pasaría un límite en caracteres, pero no en bytes.
+    const res = await createReportsHandler(makeDeps())(post(validBody({ relleno: "ñ".repeat(1500) })));
+    expect(res.status).toBe(413);
+  });
+
+  it("aplica el límite por IP antes de leer el cuerpo", async () => {
+    const deps = makeDeps({ limitIp: vi.fn(async () => ({ ok: false, retryAfter: 60 })) });
+    const request = post(validBody());
+    const res = await createReportsHandler(deps)(request);
+    expect(res.status).toBe(429);
+    expect(request.bodyUsed).toBe(false);
+  });
+
+  it("429 cuando la IP ya creó demasiadas sesiones anónimas nuevas", async () => {
+    const deps = makeDeps({
+      ensureSession: vi.fn(async () => {
+        throw new RateLimitedError(300);
+      }),
+    });
+    const res = await createReportsHandler(deps)(post(validBody()));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("300");
+    expect(deps.insertReport).not.toHaveBeenCalled();
+    expect(deps.logError).not.toHaveBeenCalled();
+  });
+
+  it("pasa la llave de IP a ensureSession para limitar las altas nuevas", async () => {
+    const deps = makeDeps();
+    await createReportsHandler(deps)(post(validBody()));
+    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash");
   });
 
   it("rechaza JSON mal formado", async () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { cellToLatLng, isValidCell } from "h3-js";
+import { cellToLatLng, getResolution, isValidCell } from "h3-js";
+import { H3_RESOLUTION } from "@/lib/geo";
 import { MAP_BOUNDS, isH3Cell, isInsideBounds } from "@/lib/geo";
 import { PROVIDERS, REPORT_TYPES, STATUS_VALUES } from "@/lib/report-types";
 
@@ -16,7 +17,7 @@ export const reportSchema = z
   .superRefine((value, ctx) => {
     // La celda debe ser un índice H3 real y estar dentro de la zona que cubrimos.
     if (isH3Cell(value.h3_cell)) {
-      const valid = isValidCell(value.h3_cell);
+      const valid = isValidCell(value.h3_cell) && getResolution(value.h3_cell) === H3_RESOLUTION;
       const [lat, lng] = valid ? cellToLatLng(value.h3_cell) : [Number.NaN, Number.NaN];
       if (!valid || !isInsideBounds(lat, lng, MAP_BOUNDS)) {
         ctx.addIssue({ code: "custom", path: ["h3_cell"], message: "Celda fuera de cobertura" });

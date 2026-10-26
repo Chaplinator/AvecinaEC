@@ -35,6 +35,9 @@ export function jsonResponse(status: number, data: unknown, requestId: string): 
 // Protección CSRF para escrituras: si el navegador manda Origin, debe ser el de la propia app.
 // Sin Origin no se acepta (los navegadores lo envían siempre en POST de otro sitio).
 export function isSameOrigin(request: Request): boolean {
+  // Segunda capa: los navegadores modernos declaran de dónde viene la solicitud y no se puede falsificar desde una página.
+  const site = request.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin") return false;
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
@@ -50,7 +53,9 @@ export function isJsonRequest(request: Request): boolean {
 
 // La IP nunca se guarda en claro: se convierte en un código irreversible (HMAC) con un secreto del servidor.
 export function clientKey(request: Request, secret: string): string {
+  // En Vercel, estas cabeceras las fija la plataforma y el cliente no puede falsificarlas.
+  // Si el sitio se pone detrás de otro proxy o fuera de Vercel, hay que revisar este orden.
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = request.headers.get("x-real-ip") ?? forwarded ?? "desconocida";
+  const ip = request.headers.get("x-vercel-forwarded-for") ?? request.headers.get("x-real-ip") ?? forwarded ?? "desconocida";
   return createHmac("sha256", secret).update(ip).digest("hex").slice(0, 32);
 }
