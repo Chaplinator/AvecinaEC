@@ -1,11 +1,27 @@
 version: 2
 updates:
+  # Un solo PR semanal con las actualizaciones menores y de parche.
+  # Los saltos mayores se ignoran a propósito: se revisan a mano, nunca solos.
+  # Las alertas de seguridad de GitHub no dependen de esta configuración.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    groups:
+      menores-y-parches:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      menores-y-parches:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

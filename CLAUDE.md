@@ -143,7 +143,7 @@ Parametrizable en una tabla `config` (no hardcodear umbrales):
 - **Resolución:** "¿Ya volvió?" a quienes confirmaron, después de 30–60 min y luego cada hora; resuelto cuando ≥50% responde que volvió o llegan reportes de `back`.
 - **Expiración:** sospechado sin confirmar en 45 min → `expired`. Confirmado sin actividad en 12 h → se pregunta de nuevo antes de cerrar.
 - **Internet:** los incidentes se agrupan por proveedor. Una caída de Netlife en una celda no marca caída de CNT.
-- **Inundación:** se confirma con ≥2 reportes; expira en 6 h si nadie lo renueva. Un reporte con foto de usuario con trust alto se muestra solo como "reporte sin confirmar" (no cuenta como incidente ni como zona afectada) hasta que lo respalde otro usuario.
+- **Inundación:** se confirma con ≥3 reportes de usuarios distintos (alineado con el k-anonimato del §10; decisión del 26/10/2026); expira en 6 h si nadie lo renueva. Un reporte con foto de usuario con trust alto se muestra solo como "reporte sin confirmar" (no cuenta como incidente ni como zona afectada) hasta que lo respalde otro usuario.
 - **Trust score:** sube cuando tus reportes coinciden con incidentes confirmados; baja con reportes que nadie confirma. Usuarios con score muy bajo quedan con peso cero, sin avisarles (shadow limit).
 
 ---
