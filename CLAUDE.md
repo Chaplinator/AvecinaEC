@@ -69,7 +69,7 @@ App colaborativa que muestra **en tiempo real** qué sectores de una ciudad est�
 | Mapa | **MapLibre GL** (o Leaflet si el bundle pesa demasiado) + teselas vectoriales | Open source, sin costo por carga |
 | Celdas geográficas | **H3** (`h3-js`), resolución 8 (~0,7 km²) para agregar | Escalable, anónimo, fácil de agregar |
 | Backend / BD | **Supabase**: Postgres + PostGIS + Auth + Realtime + Storage + Edge Functions | RLS nativo, tiempo real, plan gratuito |
-| Validación | **Zod** en cliente y servidor (esquemas compartidos) | Una sola fuente de verdad de tipos |
+| Validación | **Zod** en el servidor; el cliente comparte solo tipos y constantes (`src/lib/report-types.ts`) | Zod pesa ~13 KB en el navegador y el presupuesto de JS inicial está casi agotado (decisión 26/10/2026) |
 | Rate limiting y caché | **Upstash Redis** + `@upstash/ratelimit` | Serverless, compatible con Vercel |
 | Colas | **Upstash QStash** o colas de Supabase (pgmq) | Envío masivo de notificaciones sin bloquear |
 | Push | Web Push (VAPID) con `web-push` | Gratis, funciona en Android e iOS PWA |
@@ -226,6 +226,7 @@ Con `@upstash/ratelimit` (sliding window), por usuario **y** por IP:
 | Subida de fotos | 5 por hora |
 
 - Respuesta `429` con header `Retry-After`.
+- Valores aplicados en `POST /reports` (se afinan con k6): 120/h por IP (las redes móviles comparten IP), 10/h por usuario, 1 por tipo y celda cada 10 min y 60 altas de sesión anónima por hora por IP. Si Redis no responde, el endpoint cierra con 503 (falla cerrado).
 - Detección de patrones de abuso: muchos usuarios nuevos reportando desde la misma IP o huella → peso cero y alerta.
 - Considerar Cloudflare Turnstile (captcha invisible) solo si aparece abuso automatizado.
 

@@ -14,12 +14,16 @@
   "dependencies": {
     "@sentry/browser": "11.9.0",
     "@sentry/nextjs": "^11.9.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "@upstash/ratelimit": "^2.2.0",
+    "@upstash/redis": "^1.40.0",
     "h3-js": "^4.5.0",
     "leaflet": "^1.9.4",
     "next": "16.4.3",
     "protomaps-leaflet": "^5.1.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
