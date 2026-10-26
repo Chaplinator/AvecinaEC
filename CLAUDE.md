@@ -137,13 +137,13 @@ Usa migraciones versionadas con Supabase CLI (`supabase/migrations`). **Nunca** 
 
 Parametrizable en una tabla `config` (no hardcodear umbrales):
 
-- **Sospechado:** ≥2 usuarios distintos reportan el mismo tipo en la misma celda (o celdas vecinas, `gridDisk` k=1) en 15 minutos.
+- **Sospechado:** ≥2 usuarios distintos reportan el mismo tipo en la misma celda (o celdas vecinas, `gridDisk` k=1) en 15 minutos. Es un estado **interno**: nunca se muestra en el mapa (ver k-anonimato, §10).
 - **Disparo de confirmación:** al pasar a sospechado, se pregunta a los usuarios suscritos en esa celda y vecinas (máximo N por incidente, muestreo aleatorio para no saturar).
 - **Confirmado:** ≥3 usuarios distintos con "sí" y la proporción sí/(sí+no) ≥ 0,6. El peso de cada voto depende de `trust_score` y de si el teléfono está verificado.
 - **Resolución:** "¿Ya volvió?" a quienes confirmaron, después de 30–60 min y luego cada hora; resuelto cuando ≥50% responde que volvió o llegan reportes de `back`.
 - **Expiración:** sospechado sin confirmar en 45 min → `expired`. Confirmado sin actividad en 12 h → se pregunta de nuevo antes de cerrar.
 - **Internet:** los incidentes se agrupan por proveedor. Una caída de Netlife en una celda no marca caída de CNT.
-- **Inundación:** se confirma con ≥2 reportes o 1 reporte con foto de usuario con trust alto; expira en 6 h si nadie lo renueva.
+- **Inundación:** se confirma con ≥2 reportes; expira en 6 h si nadie lo renueva. Un reporte con foto de usuario con trust alto se muestra solo como "reporte sin confirmar" (no cuenta como incidente ni como zona afectada) hasta que lo respalde otro usuario.
 - **Trust score:** sube cuando tus reportes coinciden con incidentes confirmados; baja con reportes que nadie confirma. Usuarios con score muy bajo quedan con peso cero, sin avisarles (shadow limit).
 
 ---
@@ -338,8 +338,12 @@ El agente principal construye. Los subagentes son especialistas que revisan, pru
 ## 20. Plan de entrega (prioridad por El Niño)
 
 **Semana 1 — Base**
-- Repo, CI, entornos, Sentry, uptime, esquema inicial con RLS y pruebas.
-- Auth anónima, mapa con sectores de Guayaquil, reporte manual de luz/agua/inundación.
+- Repo, CI, entornos y deploy mínimo a Vercel desde el Día 1; Sentry (sin datos personales: sin IP, cuerpos ni coordenadas), uptime.
+- Esquema inicial con RLS y pruebas pgTAP solo para las tablas que se usan: `profiles`, `sectors`, `reports`, `config`. El resto llega en Semana 2 con su lógica.
+- Auth anónima con captcha de Supabase activado desde el inicio (limita la creación masiva de identidades).
+- Mapa con celdas H3 res 8 sobre Guayaquil; los nombres de sector salen de OpenStreetMap después. Teselas PMTiles autoalojadas (Protomaps). MapLibre se carga diferido y su peso se mide aparte del presupuesto de JS inicial.
+- Reporte manual de luz/agua/inundación: solo se guarda; la agregación a incidentes es Semana 2.
+- Cada paso de CI se agrega cuando verifica algo real (sin pasos de relleno).
 
 **Semana 2 — Núcleo**
 - Lógica de incidentes (§7), push y flujo de confirmación, suscripción a sectores.
