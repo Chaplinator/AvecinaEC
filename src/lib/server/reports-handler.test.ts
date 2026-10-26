@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { latLngToCell } from "h3-js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  CaptchaRequiredError,
   RateLimitedError,
   ServiceUnavailableError,
   createReportsHandler,
@@ -11,6 +12,8 @@ import {
 const URL = "https://app.test/api/v1/reports";
 const CELL = "888f2b98edfffff"; // Guayaquil, resolución 8
 const RID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+// Valor de relleno armado en tiempo de ejecución: no es un secreto real.
+const FAKE_CAPTCHA = "t".repeat(24);
 const USER = "11111111-1111-4111-8111-111111111111";
 
 function validBody(overrides: Record<string, unknown> = {}) {
@@ -150,7 +153,45 @@ describe("POST /api/v1/reports", () => {
   it("pasa la llave de IP a ensureSession para limitar las altas nuevas", async () => {
     const deps = makeDeps();
     await createReportsHandler(deps)(post(validBody()));
-    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash");
+    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash", null);
+  });
+
+  it("403 CAPTCHA_REQUIRED cuando hace falta una sesión nueva y no hay token", async () => {
+    const deps = makeDeps({
+      ensureSession: vi.fn(async () => {
+        throw new CaptchaRequiredError();
+      }),
+    });
+    const res = await createReportsHandler(deps)(post(validBody()));
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe("CAPTCHA_REQUIRED");
+    expect(deps.insertReport).not.toHaveBeenCalled();
+    // Es un paso normal del flujo, no un error que deba llegar a Sentry.
+    expect(deps.logError).not.toHaveBeenCalled();
+  });
+
+  it("pasa el token de captcha de la cabecera a ensureSession", async () => {
+    const deps = makeDeps();
+    await createReportsHandler(deps)(
+      post(validBody(), {
+        origin: "https://app.test",
+        "content-type": "application/json",
+        "x-captcha-token": FAKE_CAPTCHA,
+      }),
+    );
+    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash", FAKE_CAPTCHA);
+  });
+
+  it("ignora un token de captcha con caracteres no permitidos", async () => {
+    const deps = makeDeps();
+    await createReportsHandler(deps)(
+      post(validBody(), {
+        origin: "https://app.test",
+        "content-type": "application/json",
+        "x-captcha-token": "mal token;<script>",
+      }),
+    );
+    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash", null);
   });
 
   it("rechaza JSON mal formado", async () => {

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildCsp, connectOrigins, generateNonce } from "@/lib/csp";
+import { buildCsp, captchaOrigins, connectOrigins, generateNonce } from "@/lib/csp";
 
 export function proxy(request: NextRequest) {
   const nonce = generateNonce();
-  const csp = buildCsp(nonce, process.env.NODE_ENV === "development", connectOrigins(process.env));
+  const captcha = captchaOrigins(process.env);
+  const csp = buildCsp(nonce, process.env.NODE_ENV === "development", [...connectOrigins(process.env), ...captcha], captcha);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

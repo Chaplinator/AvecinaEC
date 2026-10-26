@@ -22,7 +22,12 @@ export type Deps = {
   limitIp(key: string): Promise<LimitResult>;
   limitUser(userId: string): Promise<LimitResult>;
   // Crea una sesión anónima solo si hace falta; si la IP ya creó demasiadas, lanza RateLimitedError.
-  ensureSession(request: NextRequest, ipKey: string): Promise<{ userId: string; tokens: SessionTokens | null }>;
+  // Sin sesión válida, crear una nueva exige un token de captcha: sin él lanza CaptchaRequiredError.
+  ensureSession(
+    request: NextRequest,
+    ipKey: string,
+    captchaToken: string | null,
+  ): Promise<{ userId: string; tokens: SessionTokens | null }>;
   seenRequest(userId: string, clientRequestId: string): Promise<boolean>;
   markRequest(userId: string, clientRequestId: string): Promise<void>;
   claimSlot(userId: string, type: string, cell: string): Promise<boolean>;
@@ -33,6 +38,18 @@ export type Deps = {
 };
 
 export class ServiceUnavailableError extends Error {}
+
+// Hace falta (o falló) la verificación de captcha para crear la sesión anónima.
+export class CaptchaRequiredError extends Error {}
+
+export const CAPTCHA_HEADER = "x-captcha-token";
+// Los tokens de Turnstile miden hasta 2048 caracteres; solo caracteres seguros para una cabecera.
+const CAPTCHA_TOKEN = /^[A-Za-z0-9._-]{1,2048}$/;
+
+function captchaTokenOf(request: Request): string | null {
+  const value = request.headers.get(CAPTCHA_HEADER);
+  return value && CAPTCHA_TOKEN.test(value) ? value : null;
+}
 
 export class RateLimitedError extends Error {
   constructor(public retryAfter: number) {
@@ -89,7 +106,7 @@ export function createReportsHandler(deps: Deps) {
       const input = parsed.data;
 
       // 3. Sesión anónima (se crea sola en el primer reporte: no hay registro).
-      const { userId, tokens } = await deps.ensureSession(request, ipKey);
+      const { userId, tokens } = await deps.ensureSession(request, ipKey, captchaTokenOf(request));
       const done = (status: number, outcome: "created" | "duplicate") => {
         const response = jsonResponse(status, { status: outcome }, requestId);
         if (tokens) deps.applySession(response, tokens);
@@ -139,6 +156,9 @@ export function createReportsHandler(deps: Deps) {
         return errorResponse(429, "RATE_LIMITED", "Demasiadas solicitudes. Intenta más tarde.", requestId, {
           retryAfter: error.retryAfter,
         });
+      }
+      if (error instanceof CaptchaRequiredError) {
+        return errorResponse(403, "CAPTCHA_REQUIRED", "Hace falta verificar que eres una persona.", requestId);
       }
       deps.logError(requestId, error);
       if (error instanceof ServiceUnavailableError) {

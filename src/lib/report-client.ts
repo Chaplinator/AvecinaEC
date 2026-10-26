@@ -5,11 +5,14 @@ export type SendResult =
   | { ok: false; code: string; retryAfter?: number };
 
 // Envía un reporte. Nunca lanza: devuelve un código que la interfaz traduce a un mensaje claro.
-export async function sendReport(payload: ReportPayload): Promise<SendResult> {
+export async function sendReport(payload: ReportPayload, captchaToken?: string): Promise<SendResult> {
   try {
     const response = await fetch(REPORTS_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(captchaToken ? { "X-Captcha-Token": captchaToken } : {}),
+      },
       credentials: "same-origin",
       body: JSON.stringify(payload),
     });
