@@ -161,7 +161,7 @@ Parametrizable en una tabla `config` (no hardcodear umbrales):
 ## 9. Seguridad
 
 ### Autenticación
-- **Auth anónima de Supabase** al abrir la app (cero fricción). Verificación opcional por teléfono (OTP) que aumenta el peso de los votos.
+- **Auth anónima de Supabase** (cero fricción) protegida con **Cloudflare Turnstile** (captcha invisible, activado en Supabase Auth > Attack Protection): el alta sin token falla, también si se llama a Supabase directo. El cliente resuelve el captcha por adelantado solo si no tiene sesión y lo envía en la cabecera `X-Captcha-Token`; la llave secreta vive únicamente en Supabase. Verificación opcional por teléfono (OTP) que aumenta el peso de los votos.
 - Sesiones con refresh tokens rotativos. Cookies `HttpOnly`, `Secure`, `SameSite=Lax`.
 
 ### Base de datos — RLS obligatorio

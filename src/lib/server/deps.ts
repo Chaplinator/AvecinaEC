@@ -6,6 +6,7 @@ import type { NextRequest, NextResponse } from "next/server";
 import { clientKey } from "@/lib/server/api";
 import { serverEnv } from "@/lib/server/env";
 import {
+  CaptchaRequiredError,
   RateLimitedError,
   ServiceUnavailableError,
   SLOT_SECONDS,
@@ -77,7 +78,7 @@ export function getRealDeps(): Deps {
     limitIp: (key) => guard(async () => toResult(await ipLimiter.limit(key))),
     limitUser: (userId) => guard(async () => toResult(await userLimiter.limit(userId))),
 
-    async ensureSession(request: NextRequest, ipKey: string) {
+    async ensureSession(request: NextRequest, ipKey: string, captchaToken: string | null) {
       const access = request.cookies.get(ACCESS_COOKIE)?.value;
       if (access) {
         // Las claves de este proyecto son asimétricas (ES256): se verifica localmente, sin llamar a Supabase.
@@ -90,10 +91,13 @@ export function getRealDeps(): Deps {
         const { data, error } = await authClient.auth.refreshSession({ refresh_token: refresh });
         if (!error && data.session && data.user) return { userId: data.user.id, tokens: tokensOf(data.session) };
       }
-      // Hace falta un usuario anónimo nuevo: antes se comprueba cuántos creó ya esta IP.
+      // Hace falta un usuario anónimo nuevo. Sin captcha no se llega ni a Redis ni a Supabase.
+      if (!captchaToken) throw new CaptchaRequiredError();
+      // Se comprueba cuántos creó ya esta IP; Supabase verifica el token con Cloudflare.
       const created = await guard(async () => toResult(await sessionLimiter.limit(ipKey)));
       if (!created.ok) throw new RateLimitedError(created.retryAfter);
-      const { data, error } = await authClient.auth.signInAnonymously();
+      const { data, error } = await authClient.auth.signInAnonymously({ options: { captchaToken } });
+      if (error?.code === "captcha_failed") throw new CaptchaRequiredError();
       if (error || !data.session || !data.user) {
         throw new ServiceUnavailableError("No se pudo crear la sesión anónima");
       }

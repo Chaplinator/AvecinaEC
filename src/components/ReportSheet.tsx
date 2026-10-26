@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { sendReport } from "@/lib/report-client";
+import { readStorage, writeStorage } from "@/lib/safe-storage";
 import {
   PROVIDERS,
   REPORT_TYPES,
@@ -16,7 +17,11 @@ type Props = {
   onClose: () => void;
 };
 
-type Phase = "choose" | "sending" | "done";
+type Phase = "choose" | "sending" | "verifying" | "done";
+
+// Marca local de que este teléfono ya creó su sesión anónima (la cookie real es HttpOnly y no se puede leer).
+// Si la marca está desactualizada, el servidor pide captcha y el flujo de respaldo lo resuelve.
+const SESSION_FLAG = "sefue:session";
 
 // Reporte en dos toques: qué pasa y enviar. Solo internet pide además el proveedor.
 export default function ReportSheet({ zone, onClose }: Props) {
@@ -33,21 +38,55 @@ export default function ReportSheet({ zone, onClose }: Props) {
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
 
+  const captchaBox = useRef<HTMLDivElement>(null);
+  // Token de captcha resuelto por adelantado, mientras la persona elige el tipo de incidente.
+  const pretoken = useRef<Promise<string | undefined> | null>(null);
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const hasZone = zone !== null;
+
+  useEffect(() => {
+    // Solo quien aún no tiene sesión necesitará el captcha: los demás no descargan nada.
+    if (!siteKey || !hasZone || readStorage(SESSION_FLAG) || pretoken.current) return;
+    const box = captchaBox.current;
+    if (!box) return;
+    pretoken.current = import("@/lib/turnstile")
+      .then(({ solveCaptcha }) => solveCaptcha(box, siteKey))
+      .catch(() => undefined);
+  }, [siteKey, hasZone]);
+
   const needsProvider = type === "internet";
-  const canSend = zone !== null && type !== null && (!needsProvider || provider !== null) && phase !== "sending";
+  const busy = phase === "sending" || phase === "verifying";
+  const canSend = zone !== null && type !== null && (!needsProvider || provider !== null) && !busy;
 
   const submit = async () => {
     if (!zone || !type || !canSend) return;
     setPhase("sending");
     setErrorCode(null);
-    const result = await sendReport({
+    const payload = {
       type,
       status_value: defaultStatusFor(type),
       h3_cell: zone,
       ...(type === "internet" && provider ? { provider } : {}),
       client_request_id: requestId.current,
-    });
+    };
+    // El token es de un solo uso: si ya estaba resuelto, viaja en el primer envío y se evita un viaje extra.
+    const early = pretoken.current ? await pretoken.current : undefined;
+    pretoken.current = null;
+    let result = await sendReport(payload, early);
+    // Respaldo: el servidor pide verificar que es una persona y aún no hay token válido.
+    if (!result.ok && result.code === "CAPTCHA_REQUIRED" && siteKey && captchaBox.current) {
+      setPhase("verifying");
+      try {
+        const { solveCaptcha } = await import("@/lib/turnstile");
+        const token = await solveCaptcha(captchaBox.current, siteKey);
+        setPhase("sending");
+        result = await sendReport(payload, token);
+      } catch {
+        result = { ok: false, code: "CAPTCHA_UNAVAILABLE" };
+      }
+    }
     if (result.ok) {
+      writeStorage(SESSION_FLAG, "1");
       setPhase("done");
     } else {
       setErrorCode(result.code);
@@ -140,6 +179,13 @@ export default function ReportSheet({ zone, onClose }: Props) {
             </fieldset>
           )}
 
+          <div ref={captchaBox} className="mt-4 flex justify-center empty:hidden" />
+          {phase === "verifying" && (
+            <p role="status" className="mt-4 text-sm">
+              {es.report.verifying}
+            </p>
+          )}
+
           {errorText && (
             <p role="alert" className="mt-4 text-sm font-medium text-red-700 dark:text-red-400">
               {errorText}
@@ -153,7 +199,7 @@ export default function ReportSheet({ zone, onClose }: Props) {
               disabled={!canSend}
               className="min-h-11 rounded-xl bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              {phase === "sending" ? es.report.sending : es.report.send}
+              {busy ? es.report.sending : es.report.send}
             </button>
             <button
               type="button"
