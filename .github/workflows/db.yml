@@ -1,0 +1,81 @@
+name: Base de datos
+
+on:
+  # push en cualquier rama: el resultado queda como check del PR y se prueba antes de abrirlo.
+  push:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/db.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-${{ github.ref }}
+  cancel-in-progress: false
+
+# Acciones fijadas por SHA de commit y CLI por versión exacta: este flujo usa
+# credenciales de la base remota. Dependabot propone las actualizaciones.
+jobs:
+  pgtap:
+    name: pruebas pgTAP (RLS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.122.0
+      - name: Levantar Supabase local (Docker del runner)
+        run: supabase start
+      - name: Pruebas pgTAP
+        run: supabase test db
+      - name: Apagar
+        if: always()
+        run: supabase stop --no-backup
+
+  migrar:
+    name: aplicar migraciones al proyecto remoto
+    needs: pgtap
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.122.0
+      # Los secretos solo existen en los pasos que los necesitan, no a nivel de job.
+      - name: Verificar secretos
+        id: secretos
+        env:
+          T: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          P: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          R: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -z "$T" ] || [ -z "$P" ] || [ -z "$R" ]; then
+            echo "::warning::Faltan secretos de Supabase en GitHub; no se aplican migraciones."
+            echo "listo=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "listo=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Vincular proyecto
+        if: steps.secretos.outputs.listo == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Ver qué migraciones se aplicarían
+        if: steps.secretos.outputs.listo == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --dry-run
+      - name: Aplicar migraciones
+        if: steps.secretos.outputs.listo == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --yes
