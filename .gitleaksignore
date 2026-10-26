@@ -1,0 +1,2 @@
+# Falso positivo: token de captcha de relleno en una prueba (ya reemplazado en el commit siguiente).
+71ce9cc875401fe24a2cc1d2fb47b76186dc5e32:src/lib/server/reports-handler.test.ts:generic-api-key:177

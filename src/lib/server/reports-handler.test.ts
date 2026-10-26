@@ -12,6 +12,8 @@ import {
 const URL = "https://app.test/api/v1/reports";
 const CELL = "888f2b98edfffff"; // Guayaquil, resolución 8
 const RID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+// Valor de relleno armado en tiempo de ejecución: no es un secreto real.
+const FAKE_CAPTCHA = "t".repeat(24);
 const USER = "11111111-1111-4111-8111-111111111111";
 
 function validBody(overrides: Record<string, unknown> = {}) {
@@ -174,10 +176,10 @@ describe("POST /api/v1/reports", () => {
       post(validBody(), {
         origin: "https://app.test",
         "content-type": "application/json",
-        "x-captcha-token": "0.AbC-def_123",
+        "x-captcha-token": FAKE_CAPTCHA,
       }),
     );
-    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash", "0.AbC-def_123");
+    expect(deps.ensureSession).toHaveBeenCalledWith(expect.anything(), "ip-hash", FAKE_CAPTCHA);
   });
 
   it("ignora un token de captcha con caracteres no permitidos", async () => {
