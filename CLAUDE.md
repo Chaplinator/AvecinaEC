@@ -1,4 +1,4 @@
-# CLAUDE.md — SeFue (nombre provisional)
+# CLAUDE.md — Avecina (antes "SeFue", nombre provisional)
 
 > Este archivo es la fuente de verdad del proyecto para Claude Code. Léelo completo antes de cualquier tarea.
 > Si una decisión contradice este documento, pregunta antes de implementarla. Si una decisión cambia el producto, actualiza este archivo en el mismo PR.
