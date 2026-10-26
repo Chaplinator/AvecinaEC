@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
@@ -26,4 +27,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Los source maps se suben a Sentry en privado y se borran del output (§13).
+// Sin SENTRY_AUTH_TOKEN no se sube nada y el build sigue funcionando.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  telemetry: false,
+  widenClientFileUpload: true,
+  // El valor por defecto del SDK es NO borrar (pese a lo que dicen sus tipos): forzarlo.
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
+});

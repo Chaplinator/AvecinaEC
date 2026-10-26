@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildCsp, generateNonce } from "@/lib/csp";
+import { buildCsp, connectOrigins, generateNonce } from "@/lib/csp";
 
 export function proxy(request: NextRequest) {
   const nonce = generateNonce();
-  const csp = buildCsp(nonce, process.env.NODE_ENV === "development");
+  const csp = buildCsp(nonce, process.env.NODE_ENV === "development", connectOrigins(process.env));
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
