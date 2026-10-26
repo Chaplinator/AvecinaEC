@@ -1,0 +1,40 @@
+# dependencias
+node_modules/
+.pnp
+.pnp.js
+
+# next
+.next/
+out/
+next-env.d.ts
+
+# secretos: nunca versionar
+.env
+.env.*
+!.env.example
+
+# builds, logs y cobertura
+build/
+coverage/
+*.log
+npm-debug.log*
+*.tsbuildinfo
+
+# sentry / vercel
+.vercel
+.sentryclirc
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
+
+# playwright
+test-results/
+playwright-report/
+
+# SO / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
