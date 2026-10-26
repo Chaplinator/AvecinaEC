@@ -332,8 +332,11 @@ El agente principal construye. Los subagentes son especialistas que revisan, pru
 | `test-runner` | Después de cada cambio de código y antes de cada PR. |
 | `security-reviewer` | Antes de **cada** PR. Obligatorio si se tocó BD, auth, endpoints, fotos, env o logs. |
 | `perf-auditor` | Antes de cada PR que toque UI, dependencias, `next.config`, lecturas o realtime, y antes de cada release. |
+| `revisor-opus` | Validador final (modelo Opus). Al cerrar cada semana, antes de aprobar el plan de la siguiente, antes de cada release y ante decisiones de arquitectura difíciles. Solo lectura. |
 
 **Regla de cierre de PR:** antes de abrir cualquier PR, invoca `test-runner` y `security-reviewer`. Si alguno responde FALLA o BLOQUEADO, corrige y vuelve a invocarlo. No abras el PR hasta que ambos estén en verde. Incluye en la descripción del PR el resumen de sus reportes.
+
+**Regla de cierre de semana:** antes de dar por cerrada una semana del plan (§20) y antes de empezar la siguiente, invoca `revisor-opus` con los resultados y el plan propuesto. Si responde NO APROBADO, corrige antes de avanzar. Sus hallazgos CRÍTICOS y sus decisiones para el usuario se presentan al usuario antes de pedirle que apruebe el plan.
 
 ---
 
