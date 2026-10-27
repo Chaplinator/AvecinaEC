@@ -28,7 +28,7 @@ export default function LocationConsent({ open, onAccept, onDecline }: Props) {
         e.preventDefault();
         onDecline();
       }}
-      className="m-auto w-[min(92vw,26rem)] rounded-2xl border border-zinc-300 bg-white p-6 text-zinc-900 shadow-xl backdrop:bg-black/50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+      className="m-auto w-[min(92vw,26rem)] rounded-2xl border border-line bg-surface p-6 text-fg shadow-xl backdrop:bg-black/50"
     >
       <h2 id="consent-title" className="text-lg font-semibold">
         {es.consent.title}
@@ -39,14 +39,14 @@ export default function LocationConsent({ open, onAccept, onDecline }: Props) {
         <button
           type="button"
           onClick={onAccept}
-          className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+          className="min-h-11 rounded-xl bg-action px-4 py-2 text-sm font-medium text-on-action"
         >
           {es.consent.accept}
         </button>
         <button
           type="button"
           onClick={onDecline}
-          className="min-h-11 rounded-xl border border-zinc-400 px-4 py-2 text-sm font-medium"
+          className="min-h-11 rounded-xl border border-line-strong px-4 py-2 text-sm font-medium"
         >
           {es.consent.decline}
         </button>

@@ -103,7 +103,7 @@ export default function ReportSheet({ zone, onClose }: Props) {
       ref={dialogRef}
       aria-labelledby="report-title"
       onClose={onClose}
-      className="m-auto w-[min(94vw,28rem)] rounded-2xl border border-zinc-300 bg-white p-5 text-zinc-900 shadow-xl backdrop:bg-black/50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+      className="m-auto w-[min(94vw,28rem)] rounded-2xl border border-line bg-surface p-5 text-fg shadow-xl backdrop:bg-black/50"
     >
       <h2 id="report-title" className="text-lg font-semibold">
         {phase === "done" ? es.report.doneTitle : es.report.title}
@@ -115,7 +115,7 @@ export default function ReportSheet({ zone, onClose }: Props) {
           <button
             type="button"
             onClick={() => dialogRef.current?.close()}
-            className="mt-5 min-h-11 w-full rounded-xl bg-blue-700 px-4 py-2 text-sm font-medium text-white"
+            className="mt-5 min-h-11 w-full rounded-xl bg-action px-4 py-2 text-sm font-medium text-on-action"
           >
             {es.report.close}
           </button>
@@ -126,7 +126,7 @@ export default function ReportSheet({ zone, onClose }: Props) {
           <button
             type="button"
             onClick={() => dialogRef.current?.close()}
-            className="mt-5 min-h-11 w-full rounded-xl bg-blue-700 px-4 py-2 text-sm font-medium text-white"
+            className="mt-5 min-h-11 w-full rounded-xl bg-action px-4 py-2 text-sm font-medium text-on-action"
           >
             {es.report.chooseZone}
           </button>
@@ -145,8 +145,8 @@ export default function ReportSheet({ zone, onClose }: Props) {
                 }}
                 className={`min-h-12 rounded-xl border px-4 py-2 text-left text-sm font-medium ${
                   type === option
-                    ? "border-blue-700 bg-blue-700 text-white"
-                    : "border-zinc-400 bg-transparent"
+                    ? "border-action bg-action text-on-action"
+                    : "border-line-strong bg-transparent"
                 }`}
               >
                 {type === option ? "✓ " : ""}
@@ -167,8 +167,8 @@ export default function ReportSheet({ zone, onClose }: Props) {
                     onClick={() => setProvider(option)}
                     className={`min-h-11 rounded-xl border px-3 py-2 text-sm ${
                       provider === option
-                        ? "border-blue-700 bg-blue-700 text-white"
-                        : "border-zinc-400 bg-transparent"
+                        ? "border-action bg-action text-on-action"
+                        : "border-line-strong bg-transparent"
                     }`}
                   >
                     {provider === option ? "✓ " : ""}
@@ -187,7 +187,7 @@ export default function ReportSheet({ zone, onClose }: Props) {
           )}
 
           {errorText && (
-            <p role="alert" className="mt-4 text-sm font-medium text-red-700 dark:text-red-400">
+            <p role="alert" className="mt-4 text-sm font-medium text-danger">
               {errorText}
             </p>
           )}
@@ -197,14 +197,14 @@ export default function ReportSheet({ zone, onClose }: Props) {
               type="button"
               onClick={submit}
               disabled={!canSend}
-              className="min-h-11 rounded-xl bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="min-h-11 rounded-xl bg-action px-4 py-2 text-sm font-medium text-on-action disabled:opacity-50"
             >
               {busy ? es.report.sending : es.report.send}
             </button>
             <button
               type="button"
               onClick={() => dialogRef.current?.close()}
-              className="min-h-11 rounded-xl border border-zinc-400 px-4 py-2 text-sm font-medium"
+              className="min-h-11 rounded-xl border border-line-strong px-4 py-2 text-sm font-medium"
             >
               {es.report.cancel}
             </button>
