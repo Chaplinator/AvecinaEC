@@ -118,9 +118,9 @@ Usa migraciones versionadas con Supabase CLI (`supabase/migrations`). **Nunca** 
 - `profiles` — id (= auth.uid), created_at, phone_verified (bool), trust_score (int, default 50), is_banned, locale.
 - `sectors` — id, name (ej. "Alborada 5ta etapa"), city, h3_cells (text[]), geometry (PostGIS), parent_zone.
 - `user_places` — id, user_id, label (casa/trabajo/otro), h3_cell (res 8; **no** coordenadas exactas), notify (bool).
-- `reports` — id, user_id, type (`power|water|internet|flood`), status_value (`out|back|flood_level`), h3_cell, provider (nullable, solo internet), photo_path (nullable), created_at, source (`manual|confirmation|auto_detect`), client_request_id (idempotencia, único por usuario).
+- `reports` — id, user_id, type (`power|water|internet|flood`), status_value (`out|back|flood_level`), h3_cell, provider (nullable, solo internet), photo_path (nullable), created_at, source (`manual|confirmation|auto_detect`), client_request_id (idempotencia, único por usuario), net_hash (nullable; ver abajo).
 - `incidents` — id, type, h3_cell, sector_id, provider, state (`suspected|confirmed|resolved|expired`), started_at, confirmed_at, resolved_at, report_count, distinct_users, confidence (0–1).
-- `confirmations` — id, incident_id, user_id, answer (`yes|no|away`), created_at.
+- `confirmations` — id, incident_id, user_id, answer (`yes|no|away`), net_hash (nullable), created_at.
 - `push_subscriptions` — id, user_id, endpoint, keys (cifrado), created_at, last_success_at, failures.
 - `notification_log` — id, user_id, incident_id, kind, sent_at (para límites anti-spam).
 - `audit_log` — acciones administrativas y de moderación.
@@ -131,18 +131,26 @@ Usa migraciones versionadas con Supabase CLI (`supabase/migrations`). **Nunca** 
 
 **Retención:** reports crudos se borran o anonimizan a los **90 días**; incidents agregados se conservan como historial.
 
+**`net_hash` (decisión del 26/10/2026):** `HMAC-SHA256(clave_diaria, red)` con red = IP /24 (IPv6 /56), guardado en reportes, confirmaciones y altas de sesión anónima. La IP sale solo de la cabecera fijada por Vercel, nunca de cabeceras del cliente; sin IP válida queda NULL. La clave diaria es `HKDF(secreto_net_hash, fecha_EC)` (el secreto es distinto de los demás y nunca está en la BD), y el hash se trunca a 64 bits. La clave rota a las 04:00 hora de Ecuador (entre 03:30 y 04:30 se comparan la anterior y la actual). A los **7 días** se pone en NULL (job con prueba; los reportes siguen 90 días) y también se borra al eliminar la cuenta. El alta anónima se registra en la tabla `anon_signups` (id, user_id, net_hash, created_at) desde `/api/v1`, porque ocurre en Supabase Auth. Es pseudonimización, no anonimización, mientras exista `user_id` en la misma fila; los backups lo retienen más de 7 días y la política de privacidad debe decirlo. Solo sirve para agrupar cuentas de una misma red (§7, §12); nunca se expone ni se escribe en logs. La tabla de votos usa un `person_key` aleatorio por incidente (no derivado del hash), para que el borrado a 7 días no deje rastro.
+
 ---
 
 ## 7. Lógica de incidentes (núcleo del producto)
 
 Parametrizable en una tabla `config` (no hardcodear umbrales):
 
-- **Sospechado:** ≥2 usuarios distintos reportan el mismo tipo en la misma celda (o celdas vecinas, `gridDisk` k=1) en 15 minutos. Es un estado **interno**: nunca se muestra en el mapa (ver k-anonimato, §10).
+- **Sospechado:** ≥2 usuarios distintos reportan el mismo tipo en la misma celda o su disco (`gridDisk` k=1, 7 celdas) en 15 minutos. Es un estado **interno**: nunca se muestra en el mapa (ver k-anonimato, §10).
 - **Disparo de confirmación:** al pasar a sospechado, se pregunta a los usuarios suscritos en esa celda y vecinas (máximo N por incidente, muestreo aleatorio para no saturar).
-- **Confirmado:** ≥3 usuarios distintos con "sí" y la proporción sí/(sí+no) ≥ 0,6. El peso de cada voto depende de `trust_score` y de si el teléfono está verificado.
-- **Resolución:** "¿Ya volvió?" a quienes confirmaron, después de 30–60 min y luego cada hora; resuelto cuando ≥50% responde que volvió o llegan reportes de `back`.
-- **Expiración:** sospechado sin confirmar en 45 min → `expired`. Confirmado sin actividad en 12 h → se pregunta de nuevo antes de cerrar.
+- **Confirmado** (decisión del 26/10/2026; especificación y simulación en `docs/specs/incidentes-umbrales.md`): ≥3 personas distintas con "sí" contadas en el disco de la celda (`gridDisk` k=1) sobre los votos de los últimos **60 min**, y proporción sí/(sí+no) ≥ 0,6. El peso del voto depende de `trust_score` y del teléfono verificado. Protecciones aprobadas: (a) **ancla**: al menos 1 "sí" de una persona con cuenta de más de 24 h cuyo lugar suscrito (de más de 24 h) o cuyo reporte está en la propia celda; (b) **espera mínima de 5 min** tras pasar a sospechado; (c) el "no" de una persona cuya celda no es la del incidente pesa **0,5**; (d) la pregunta se envía a una muestra aleatoria del res 7 completo, con texto neutro que no nombra celda ni sector, retraso aleatorio de 0 a 2 min y relleno de suscritos de celdas sin reportes, para que recibirla no pruebe que hay reportes cerca (la propia celda solo se prioriza en el orden interno de envío). "No estoy en casa" no suma ni resta.
+- **Qué se muestra:** la celda res 8 si hay ≥3 personas acumuladas en su disco; si no, la celda padre res 7 completa; si ninguna cumple, no se muestra. Las zonas son siempre una celda H3 fija, con histéresis (volver a res 8 exige ≥5 personas sostenidas 10 min y 30 min de permanencia en res 7) y cambios publicados en cubos de 5 min. Nunca se muestran conteos menores a 3.
+- **Defensa por red:** dentro de un incidente, las cuentas con el mismo `net_hash` cuentan como UNA persona; mientras no exista verificación por teléfono (OTP, después del lanzamiento), aplica a todas las cuentas. Con ≥5 cuentas nuevas de una misma red en 60 min se dispara solo una **alerta**: no cambia pesos por sí sola (castigaría a usuarios reales en el pico, con los datos móviles compartidos). Las cuentas de menos de 24 h no cuentan para el k ni para el muestreo de preguntas, y su "no" pesa 0,5. Un lugar suscrito nuevo o cambiado no cuenta como ancla ni como voto hasta pasadas 24 h.
+- **Resolución:** "¿Ya volvió?" a quienes confirmaron **y también a suscritos de la celda que no votaron**, después de 30–60 min y luego cada hora; resuelto cuando ≥3 personas distintas (dedup por red, cuentas de más de 24 h) responden que volvió o envían `back` y la proporción es ≥0,6, simétrico a confirmar; un solo reporte `back` nunca cierra un incidente, y "todavía sin luz" cuenta como "no" y renueva la visibilidad.
+- **Retracción** (decisión del 26/10/2026): tras confirmar, si llegan ≥3 "no" de personas de la propia celda (cuenta y lugar de más de 24 h, dedup por red) y la proporción sí/(sí+no) baja de 0,4, el incidente pasa a `expired` y deja de mostrarse. Tope de visibilidad: 12 h sin un "sí" nuevo de ≥2 personas distintas de cuentas de más de 24 h, con un techo absoluto de 48 h (luz y agua) tras el cual se exige la confirmación completa otra vez; así un incidente falso no vive para siempre. Los contadores se materializan en el incidente: borrar cuentas nunca retracta, resuelve ni oculta (§10). Detalle y casos borde en la especificación.
+- **Expiración:** sospechado sin confirmar en **60 min** (antes 45, alineado con la ventana de votos; decisión del 26/10/2026) → `expired`. Confirmado sin actividad en 12 h → se pregunta de nuevo antes de cerrar.
 - **Internet:** los incidentes se agrupan por proveedor. Una caída de Netlife en una celda no marca caída de CNT.
+- **Horario nocturno (22:00–06:00):** no salen preguntas push, así que no llegan "no" de vecinos y la defensa se debilita. Para publicar de noche se exigen **5 personas o 2 anclas**; las preguntas de luz y agua se permiten hasta las 23:00 (decisión del 26/10/2026).
+- **Verificación por teléfono (OTP):** se implementa después del lanzamiento; hasta entonces no existe la exención de la defensa por red.
+- **Duración y color:** los cortes se pintan según el tiempo transcurrido: amarillo hasta 2 h, naranja de 2 a 4 h, rojo después de 4 h (umbrales en `config`). Ver §18.
 - **Inundación:** se confirma con ≥3 reportes de usuarios distintos (alineado con el k-anonimato del §10; decisión del 26/10/2026); expira en 6 h si nadie lo renueva. Un reporte con foto de usuario con trust alto se muestra solo como "reporte sin confirmar" (no cuenta como incidente ni como zona afectada) hasta que lo respalde otro usuario.
 - **Trust score:** sube cuando tus reportes coinciden con incidentes confirmados; baja con reportes que nadie confirma. Usuarios con score muy bajo quedan con peso cero, sin avisarles (shadow limit).
 
@@ -151,8 +159,8 @@ Parametrizable en una tabla `config` (no hardcodear umbrales):
 ## 8. Notificaciones
 
 - Máximo **3 preguntas de confirmación por usuario por día** y 1 por incidente.
-- Horario silencioso por defecto 22:00–06:00 (configurable), excepto inundación severa en su sector.
-- Textos cortos y accionables: "¿Se fue la luz en Alborada? Responde con un toque".
+- Horario silencioso por defecto 22:00–06:00 (configurable), excepto inundación severa en su sector y las preguntas de luz y agua hasta las 23:00 (§7).
+- Textos cortos y accionables, **sin nombrar celda ni sector** para no revelar que hay reportes cerca (§7): "¿Tienes luz ahora en tu casa? Responde con un toque".
 - Envío por cola en lotes, con reintentos y backoff. Eliminar suscripciones que fallen 3 veces seguidas (410 Gone).
 - Registrar todo en `notification_log` para métricas de entrega y respuesta.
 
@@ -166,7 +174,7 @@ Parametrizable en una tabla `config` (no hardcodear umbrales):
 
 ### Base de datos — RLS obligatorio
 - **RLS activado en TODAS las tablas sin excepción.** Una tabla sin políticas es un bug crítico.
-- Políticas mínimas: cada usuario lee y escribe solo sus `profiles`, `user_places`, `push_subscriptions`. Nadie lee `reports` de otros usuarios. `incidents` y `sectors` son de lectura pública (solo datos agregados).
+- Políticas mínimas: cada usuario lee y escribe solo sus `profiles`, `user_places`, `push_subscriptions`. Nadie lee `reports` de otros usuarios. `sectors` es de lectura pública. **`incidents` NO es legible por clientes** (guarda la celda de origen, conteos y horas exactas): el cliente lee solo una vista o RPC `published_zones` con `{zona, res, tipo, proveedor, estado, cubo_publicado}`, y Realtime emite únicamente esa vista, en cubos de 5 min. Prueba pgTAP: anon y authenticated no pueden leer el origen ni `distinct_users`.
 - Escrituras en `incidents` solo desde funciones del servidor.
 - Las políticas RLS **tienen pruebas automáticas** (pgTAP) en CI: usuario A no puede leer ni modificar datos de usuario B.
 - Funciones `security definer` con `search_path` fijo y revisión obligatoria.
@@ -188,7 +196,8 @@ Parametrizable en una tabla `config` (no hardcodear umbrales):
 - Cumplir la **Ley Orgánica de Protección de Datos Personales (LOPDP) de Ecuador**: consentimiento explícito para ubicación y notificaciones, finalidad declarada, minimización, derechos de acceso, rectificación y eliminación.
 - Pantalla de consentimiento clara antes de pedir ubicación. La app funciona aunque el usuario niegue la ubicación (elige su sector manualmente).
 - "Eliminar mi cuenta y mis datos" accesible en ajustes, efectivo en ≤30 días (idealmente inmediato).
-- **k-anonimato:** nunca mostrar un incidente con menos de 3 usuarios distintos. Nunca mostrar quién reportó.
+- **Supresión de cuenta:** se eliminan los `reports`, `confirmations` y el `net_hash` del usuario; los contadores de incidentes ya publicados son enteros que no se recalculan, así que borrar una cuenta nunca oculta, retracta ni resuelve una zona (si no, la desaparición de una zona delataría a quien se borra). Los backups y PITR conservan el `net_hash` más de 7 días; la política de privacidad debe decirlo.
+- **k-anonimato:** nunca mostrar un incidente con menos de 3 usuarios distintos, calculados como personas acumuladas en la zona mostrada y su disco (§7). Nunca mostrar quién reportó ni conteos menores a 3.
 - Política de privacidad y términos de uso publicados antes del lanzamiento. Aviso: la información es comunitaria y no oficial.
 - Datos vendidos o compartidos con terceros (fase 2 B2B): **solo agregados y anonimizados**, nunca datos individuales.
 - Logs sin datos personales (sin teléfonos, sin tokens, sin coordenadas).
@@ -227,8 +236,8 @@ Con `@upstash/ratelimit` (sliding window), por usuario **y** por IP:
 
 - Respuesta `429` con header `Retry-After`.
 - Valores aplicados en `POST /reports` (se afinan con k6): 120/h por IP (las redes móviles comparten IP), 10/h por usuario, 1 por tipo y celda cada 10 min y 60 altas de sesión anónima por hora por IP. Si Redis no responde, el endpoint cierra con 503 (falla cerrado).
-- Detección de patrones de abuso: muchos usuarios nuevos reportando desde la misma IP o huella → peso cero y alerta.
-- Considerar Cloudflare Turnstile (captcha invisible) solo si aparece abuso automatizado.
+- Detección de patrones de abuso: muchos usuarios nuevos reportando desde la misma red (`net_hash`, §6) → alerta, sin cambiar pesos (castigaría a usuarios reales con datos móviles compartidos). Con ≥5 cuentas nuevas de una misma red en 60 min se dispara la alerta; la defensa es la deduplicación por incidente (§7), y no se bloquea la red entera. El captcha (Turnstile) protege el alta de sesión anónima en Supabase.
+- Cloudflare Turnstile está activo en el alta de sesión anónima (decisión del 26/10/2026).
 
 ---
 
@@ -302,7 +311,7 @@ El patrón de tráfico es de **picos extremos**: tráfico bajo en días normales
 ## 18. Accesibilidad y UX
 
 - WCAG 2.1 AA: contraste, tamaños táctiles ≥ 44 px, etiquetas para lectores de pantalla.
-- **No depender solo del color** en el mapa: usar íconos y patrones (relevante para daltonismo).
+- **No depender solo del color** en el mapa: usar íconos y patrones (relevante para daltonismo). Sistema de color del mapa (decisión del 26/10/2026): el **tipo** va en ícono y patrón (rayo, gota, señal, ola); el **estado** va en color. Cortes: amarillo (hasta 2 h), naranja (2 a 4 h), rojo (más de 4 h); volvió: verde; sin reportes: gris; zona que el usuario sigue: solo contorno, sin relleno. **Inundación: siempre azul** (propio, distinto del azul marino de marca), con el nivel en gotas y texto, y contorno rojo solo en "no pasa carro". Nunca se muestra el número exacto de reportes: se muestran niveles. Siempre se acompaña de texto del tiempo ("hace 3 h"), calculado desde el instante publicado (cubo de 5 min de la confirmación) y redondeado, nunca desde el primer reporte.
 - Modo oscuro (ahorra batería durante apagones en pantallas OLED).
 - Textos de la UI centralizados en archivos de i18n desde el inicio (aunque solo exista español).
 
@@ -358,7 +367,7 @@ El agente principal construye. Los subagentes son especialistas que revisan, pru
 **Semana 3 — Lanzamiento**
 - Internet por proveedor, historial por sector, PWA instalable y modo offline.
 - Prueba de carga k6, política de privacidad y términos, checklist de lanzamiento (§21).
-- Lanzamiento suave en 3–5 ciudadelas de Guayaquil.
+- Lanzamiento suave en 3–5 ciudadelas de Guayaquil. El mapa público se enciende por celda res 7 (la "ciudadela" no existe en el modelo H3) cuando se alcance una adopción local mínima (referencia: 1 % de la población de esa zona, según INEC), contando cada cuenta una sola vez, con más de 7 días y con push activo; por eso la primera semana del piloto no publica mapa y muestra "estamos juntando avisos". Es un control de seguridad contra oleadas de cuentas falsas, no solo de producto. La densidad de usuarios pesa más que cualquier regla (simulación del 26/10/2026).
 
 **Después:** app Android nativa con detección automática, cronogramas oficiales, expansión a Quito, Durán, Daule, Samborondón y Manabí.
 
