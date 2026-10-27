@@ -32,6 +32,13 @@ async function guard<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+// La sesión murió de verdad (token inexistente, ya usado o vencido): Supabase responde 4xx. Un 429, un 5xx
+// o un corte de red (status 0) son problemas pasajeros y no cuentan.
+export function isRefreshTokenDead(error: { status?: number } | null | undefined): boolean {
+  const status = error?.status;
+  return typeof status === "number" && status >= 400 && status < 500 && status !== 429;
+}
+
 export function getRealDeps(): Deps {
   if (cached) return cached;
   const env = serverEnv();
@@ -90,6 +97,9 @@ export function getRealDeps(): Deps {
       if (refresh) {
         const { data, error } = await authClient.auth.refreshSession({ refresh_token: refresh });
         if (!error && data.session && data.user) return { userId: data.user.id, tokens: tokensOf(data.session) };
+        // Un fallo pasajero (red, 5xx, límite de Supabase) no es motivo para crear otra identidad: en un
+        // pico se perdería el historial de confianza y se multiplicarían las altas. Se pide reintentar.
+        if (!isRefreshTokenDead(error)) throw new ServiceUnavailableError("No se pudo renovar la sesión");
       }
       // Hace falta un usuario anónimo nuevo. Sin captcha no se llega ni a Redis ni a Supabase.
       if (!captchaToken) throw new CaptchaRequiredError();
