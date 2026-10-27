@@ -14,8 +14,8 @@ con k>=3 (res 8, si no res 7), (3) votos válidos 60 min, (4) lanzamiento concen
 mínimo de adopción local de ~1 % (§2, regla 7).
 
 Protecciones aprobadas (salen de la simulación; sin ellas la medida 1 abre un hueco de abuso y empeora los cortes
-pequeños, §8): (a) ancla en la celda, (b) espera mínima de 5 min, (c) "no" de vecinas con peso 0,5, (d) orden
-interno de preguntas: celda propia primero (solo como orden de envío, no como reparto observable; ver §2.6 y el hallazgo de §8.8).
+pequeños, §8): (a) ancla en la celda, (b) espera mínima de 5 min, (c) "no" de vecinas con peso 0,5, (d) la
+pregunta va primero a la celda propia, con relleno obligatorio (APROBADO 26/10/2026; ver §2.6 y §8.8).
 Además, defensa por red (§6.3), mínimo de adopción local (§2, regla 7), regla de noche (§2, regla 8), retracción (§2, regla 9)
 y tope duro de visibilidad (§2, regla 10).
 
@@ -71,10 +71,10 @@ Definiciones:
 Reglas:
 1. **Sospechado** (sin cambios): >=2 personas distintas reportan el mismo tipo (e igual proveedor si es internet) en
    `D(c)` dentro de `incident_suspect_window_min` (15). Es interno y nunca se muestra.
-2. **Quién recibe la pregunta** (detalle de privacidad y reglas obligatorias en §2.6): muestra aleatoria de suscritos en `U(c)` (res 7
-   completo), hasta `incident_ask_max` (40) por incidente. El orden interno de envío puede ir primero a la celda propia
-   (`incident_ask_own_cell_first`), pero el reparto observable es el de toda `U(c)` más relleno de celdas sin reportes.
-   AVISO: la simulación v2 mide que este reparto neutro debilita mucho la protección y la visibilidad (§8.8, punto 1); hay una propuesta en §11.
+2. **Quién recibe la pregunta** (APROBADO 26/10/2026; detalle y reglas obligatorias en §2.6): hasta `incident_ask_max` (40) por incidente, PRIMERO a los
+   suscritos de la propia celda `c` (`incident_ask_own_cell_first` = true), completando con el resto de `U(c)` (res 7), con relleno OBLIGATORIO de suscritos de celdas
+   sin reportes (`incident_ask_filler_pct` bloqueada, mínimo > 0, falla cerrado), texto neutro, retraso aleatorio de 0 a 2 min, máximo 1 destinatario por `net_hash`
+   por incidente y exclusión de cuentas de menos de 24 h. Costo aceptado de privacidad en §2.6 y §9 (riesgo 9).
 3. **Confirmado** (nivel res 8): sobre los votos de los últimos `incident_vote_window_min` (60) de personas con lugar
    suscrito en `D(c)` (o con el reporte en `D(c)`):
    - personas con "sí" (el reporte original cuenta como "sí") >= 3, y
@@ -176,7 +176,10 @@ Reglas:
 ### 2.6 La pregunta push no filtra información
 Un ataque de inferencia: si solo reciben la pregunta los suscritos de la celda con reportes, recibirla prueba que
 hay reportes (o un sospechado) cerca. Por eso:
-1. La pregunta se envía a una muestra aleatoria de suscritos en `U(c)` (res 7 completo), no solo a la celda de origen.
+1. REPARTO APROBADO 26/10/2026: la pregunta se envía PRIMERO a los suscritos de la propia celda `c`, completando hasta `incident_ask_max` con el resto de
+   `U(c)` (res 7) en muestra aleatoria, y siempre con el relleno obligatorio del punto 4. Resultado medido que lo justifica (§8.8, punto 1): visibilidad de cortes de
+   1 celda 29 % -> 46 %; 3 cuentas falsas de más de 24 h publican 54 % -> 16 %. Costo aceptado: es de privacidad; quien recibe la pregunta puede inferir que hay
+   reportes cerca. Se mitiga con el relleno obligatorio (punto 4) y el texto neutro (punto 2); se mide en el piloto (§9, riesgo 9).
 2. Texto neutro que no nombra celda ni sector: "¿Tienes luz ahora en tu casa?" (equivalente para agua, internet con
    proveedor, inundación). Los textos finales los revisa `copy-es`. Esto reemplaza al ejemplo con sector de CLAUDE.md §8
    para esta pregunta de confirmación (alinear en CLAUDE.md cuando se apruebe el texto).
@@ -188,8 +191,8 @@ hay reportes (o un sospechado) cerca. Por eso:
 5. Se excluyen del muestreo y del conteo de k las cuentas con menos de 24 h o con trust bajo: evita que un atacante
    acapare las 40 preguntas con cuentas propias y evita espiar a un único usuario real (si solo él recibiera la
    pregunta, su respuesta delataría su estado).
-6. La protección (d) "preguntar primero a la celda propia" queda solo como orden interno de envío dentro de la
-   muestra, no como reparto observable. La pregunta no revela si el incidente está "sospechado".
+6. La protección (d) "preguntar primero a la celda propia" es regla aprobada (punto 1), ya no solo orden interno. El relleno nunca puede ser 0 y la pregunta
+   no revela si el incidente está "sospechado".
 7. Muestreo con máximo 1 destinatario por `net_hash` por incidente (regla de §2.6, antes propuesta de §11.3); las cuentas con `net_hash` NULL
    comparten un cupo máximo (`incident_ask_null_net_max`). Impide acaparar las 40 preguntas desde pocas redes.
 8. Siguen los límites de CLAUDE.md §8: máx. 3 preguntas por usuario por día y 1 por incidente. Las preguntas de
@@ -278,7 +281,7 @@ mecanismo que oculta una zona por votos, exige >=3 personas y no se dispara por 
 | `incident_confirm_min_persons` | 3 | BLOQUEADA: no bajar de 3 (k-anonimato). |
 | `incident_confirm_ratio` | 0,6 | BLOQUEADA por decisión de producto. |
 | `incident_ask_max` | 40 | Máx. de preguntas por incidente (y por ronda de "¿Ya volvió?"). |
-| `incident_ask_own_cell_first` | true | Orden interno de envío, no reparto observable (§2.6). Ver propuesta en §11, punto 1. |
+| `incident_ask_own_cell_first` | true | APROBADA 26/10/2026 (no propuesta): la pregunta va primero a los suscritos de la celda propia `c`, luego el resto de `U(c)`, siempre con relleno obligatorio (§2.6). |
 | `incident_ask_filler_pct` | por fijar (> 0) | BLOQUEADA, mínimo > 0 (falla cerrado si es 0 o falta). Relleno OBLIGATORIO de celdas sin reportes (§2.6). El valor exacto: piloto (§11). |
 | `incident_ask_delay_max_s` | 120 | Retraso aleatorio máximo de la pregunta. |
 | `incident_anchor_required` | true | Al menos 1 "sí" de una persona ancla (cuenta > 24 h) en la celda mostrada (res 7: en su padre). |
@@ -443,6 +446,9 @@ pgTAP (motor SQL, §7.1) y deben dar el mismo resultado. Umbrales inyectados des
     `incidents`; Realtime solo emite `published_zones` y en el cubo de 5 min (pgTAP).
 11. Pregunta neutra con relleno: el texto no nombra celda ni sector; hay destinatarios de celdas sin reportes; retraso
     aleatorio de 0 a 2 min; el destinatario no puede deducir si hay reportes cerca.
+    11b. Reparto aprobado (26/10/2026): la pregunta llega PRIMERO a los suscritos de la propia celda `c` y luego al resto de `U(c)`, pero el relleno de celdas sin
+    reportes nunca es 0 (con `incident_ask_filler_pct` en 0 o ausente falla cerrado y no se envía nada), el texto no nombra celda ni sector, hay máximo 1 destinatario
+    por `net_hash` por incidente, y las cuentas de menos de 24 h quedan excluidas.
 12. `net_hash` NULL sin IP válida (cabecera ausente o enviada solo por el cliente); la cuenta pesa 0,5 y cuenta separada.
 13. Claves bloqueadas fallan cerrado (secreto HMAC ausente, config alterada: `k < 3`, ratio distinto de 0,6).
 14. Retracción: (a) incidente confirmado con 3 "sí" de atacante; llegan 3 "no" de la celda propia y la proporción baja de 0,4 -> `expired`
@@ -728,7 +734,7 @@ Con "ambas" (N = 3, proporción < 0,4) un corte real casi nunca se retracta cuan
 
 ### 8.8 Qué conclusiones de la v1 cambian (contradicciones declaradas)
 
-1. **Las protecciones ya no recuperan los cortes de 1 celda.** La v1 decía que la regla e subía los cortes de 1 celda con 1 % de adopción de 24 % (d) a 53 %. En la v2 final (f) sube solo de 27 % (d) a 29 %, frente a 42 % de la original (a). La mejora de e venía de preguntar primero a la celda propia, que §2.6 no permite como reparto observable. Con preguntas primero a la celda propia (h) la v2 da 46 %; con la mitad (w), 45 %.
+1. **Las protecciones ya no recuperan los cortes de 1 celda.** La v1 decía que la regla e subía los cortes de 1 celda con 1 % de adopción de 24 % (d) a 53 %. En la v2 final (f) sube solo de 27 % (d) a 29 %, frente a 42 % de la original (a). La mejora de e venía de preguntar primero a la celda propia, que §2.6 no permite como reparto observable. Con preguntas primero a la celda propia (h) la v2 da 46 %; con la mitad (w), 45 %. DECISIÓN APROBADA 26/10/2026: se adopta h (primero la celda propia, relleno obligatorio): visibilidad de cortes de 1 celda 29 % -> 46 % y 3 cuentas falsas publican 54 % -> 16 %. El costo es de privacidad (quien recibe la pregunta puede inferir que hay reportes cerca), mitigado con relleno obligatorio y texto neutro (§2.6, §9 riesgo 9).
 2. **La v2 final deja pasar más abuso que la regla e de la v1** con adopción de 1 %: 30 cuentas juntas fabrican 5,4 zonas (v1: 0,9) y 3 cuentas publican el 54 % de las veces (e: 6 %). Las causas son las cuentas del atacante con más de 24 h (la v1 no las distinguía) y el reparto de preguntas al azar. Con h baja a 16 % y 1,7 zonas. La compuerta de adopción (1 %) sigue siendo necesaria: sin ella 30 cuentas dispersas fabrican 11,6 a 11,9 zonas con adopción de 0,1 % a 0,5 %.
 3. **La regla de noche aprobada no frena a un atacante**: a las 02:00, 3 cuentas con más de 24 h publican el 100 % de las veces con el modo `or` (§8.3).
 4. **La alerta por red de 5 altas por hora no sirve en el pico** (51 % a 90 % de las altas honestas con 1.000 altas por hora y 20 a 100 redes móviles). La v1 solo la había calculado de forma determinista.
@@ -748,7 +754,7 @@ Con "ambas" (N = 3, proporción < 0,4) un corte real casi nunca se retracta cuan
 
 ## 9. Riesgos abiertos
 
-1. Las medidas aprobadas empeoran los cortes de 1 celda y facilitan el abuso sin las protecciones de §2 regla 3, y el reparto neutro de preguntas (§2.6) debilita las protecciones (§8.8, puntos 1 y 2). Decisión en §11, punto 1.
+1. Las medidas aprobadas empeoran los cortes de 1 celda y facilitan el abuso sin las protecciones de §2 regla 3, y el reparto neutro de preguntas debilitaba las protecciones (§8.8, puntos 1 y 2); resuelto el 26/10/2026 con el reparto "celda propia primero" (§2.6).
 2. Todos los resultados dependen de la densidad de usuarios. Con adopción < 0,5 % fuera de las ciudadelas piloto, la
    mayoría de los cortes pequeños no se verá en el mapa, y con la compuerta de adopción (1 %) ningún corte se verá por debajo de ese umbral. Hay que medir adopción real en la semana 1 del piloto.
 3. Atacante con redes distintas: no hay defensa técnica barata; se mitiga con costos (captcha, cuentas de 24 h, ancla, espera, retracción) y alertas.
@@ -759,9 +765,12 @@ Con "ambas" (N = 3, proporción < 0,4) un corte real casi nunca se retracta cuan
 6. La espera de 5 min añade latencia al primer aviso (medido: sin efecto visible en los tiempos de §8.2).
 7. Sin exclusividad por origen, dos incidentes adyacentes se ven como zonas contiguas y la agrupación a res 7 pinta celdas sin corte (§8.2). Decidir si se acepta o se limita la promoción a res 7.
 8. Pendiente: peso por antigüedad de cuenta y trust, no simulados (todos peso 1).
-9. Inferencia por la pregunta push: recibirla podría revelar reportes cercanos. Se mitiga con muestra de `U(c)`, texto
-   neutro, retraso aleatorio, relleno de celdas sin reportes y exclusión de cuentas < 24 h (§2.6). Riesgo residual:
-   zonas con muy pocos suscritos. Si se adopta el reparto con peso a la celda propia (§11, punto 1), el relleno pasa a ser obligatorio.
+9. Inferencia por la pregunta push: con el reparto aprobado el 26/10/2026 (primero a la celda propia) recibir la pregunta PUEDE revelar que hay reportes cerca.
+   Ese costo de privacidad fue ACEPTADO a cambio de visibilidad 29 % -> 46 % en cortes de 1 celda y de bajar 54 % -> 16 % las zonas falsas con 3 cuentas. Se mitiga con
+   relleno obligatorio de celdas sin reportes (`incident_ask_filler_pct` > 0, falla cerrado), texto neutro, retraso aleatorio, máximo 1 por `net_hash` y exclusión
+   de cuentas < 24 h (§2.6). Riesgo residual: zonas con muy pocos suscritos. REQUISITO del piloto: medir (a) qué fracción de preguntas de relleno se responde, y
+   (b) si el relleno realmente impide inferir reportes (por ejemplo, si responder "sí" a un relleno sigue correlacionando con reportes cercanos); si no lo impide,
+   volver a decidir con el usuario.
 10. Sin la regla de adopción mínima, el atacante disperso fabrica zonas falsas fuera del piloto (§2 regla 7, §8.4). Con la regla, durante la primera semana tras el lanzamiento (solo cuentan cuentas de más de 7 días) no se publica nada (§11, punto 6).
 11. Latencia del job de pg_cron (10 a 15 s) como techo del tiempo de reacción del motor; aceptable frente al cubo de 5 min.
 12. Noche: el modo `or` no frenaba a un atacante (§8.3); con `and` (valor inicial) frena a 3 cuentas pero NO a 5, y de noche tampoco hay contradicción de vecinos ni rondas. Mitigación: revisión de las 06:30 (§2 regla 8).
@@ -782,7 +791,7 @@ alerta de red sin peso cero, horario silencioso con excepción luz/agua hasta 23
 adopción por res 7 con arranque sin mapa los primeros 7 días, regla de supresión y backups en §10). Lo que CLAUDE.md AÚN NO trae y esta spec sí, para alinear:
 - §7: `expire_suspected_minutes` = 60 (era 45); resolución con >=3 personas y proporción >=0,6 (no "≥50 % o reportes back"; un solo `back` nunca cierra); noche con 5 personas Y 2 anclas,
   revisión de las 06:30 y rondas suspendidas de noche (primera ronda a las 06:00); tope de visibilidad con renovación de >=2 personas y techo absoluto de 48 h (luz y agua);
-  "¿Ya volvió?" también a suscritos que no votaron; retracción solo con cuentas y lugares de más de 24 h y cooldown que no bloquea votos nuevos; protección (d) como orden interno;
+  "¿Ya volvió?" también a suscritos que no votaron; retracción solo con cuentas y lugares de más de 24 h y cooldown que no bloquea votos nuevos; protección (d) como regla de reparto aprobada (celda propia primero, con relleno obligatorio);
   `published_zones` y canal Broadcast del job (no `postgres_changes`); regla de resolución de zona (res 8 con >=3 en el disco; refinamiento a >=5 y 10 min); exención por teléfono desactivada.
 - §6: tablas `anon_signups`, `published_zones`/`incidents` privada, `h3_neighbors`, `h3_parent`, tabla de votos con `person_key` aleatorio; contadores materializados en el incidente; `config` con las claves de §5.
 - §8: texto neutro de la pregunta push sin sector, con retraso aleatorio y relleno obligatorio (`incident_ask_filler_pct` > 0); muestreo con máximo 1 destinatario por `net_hash`;
@@ -798,8 +807,8 @@ APROBADAS el 26/10/2026 y ya movidas a reglas normales (§2 reglas 8 a 10, §3.1
 Sigue abierto, de la decisión original:
 A. **Relleno de preguntas (`incident_ask_filler_pct`, obligatorio y > 0; solo falta el valor) y niveles pocos / varios / muchos** (`display_level_few_max`, `display_level_several_max`): valores a fijar con el piloto.
 
-Propuestas NUEVAS que salen de la simulación v2 (no están aprobadas; ninguna cambia lo bloqueado k = 3 y ratio 0,6):
-1. **Reparto de preguntas.** El reparto neutro de §2.6 baja la visibilidad de los cortes de 1 celda (29 % contra 46 %) y sube el abuso (3 cuentas publican el 54 % contra 16 %). Propuesta: enviar primero y en mayor proporción a la celda propia (variante h, o la mitad, w) y volver obligatorio el relleno de celdas sin reportes para que recibir la pregunta no pruebe que hay reportes cerca. Es una decisión de privacidad contra seguridad.
+Propuestas que salen de la simulación v2 (las que no dicen RESUELTO no están aprobadas; ninguna cambia lo bloqueado k = 3 y ratio 0,6):
+1. (Reparto de preguntas: RESUELTO 26/10/2026, ya es regla en §2.6 y §5; ya no es propuesta.)
 2. **Regla de noche.** RESUELTA por endurecimiento: `and` como valor inicial + revisión de las 06:30 (§2 regla 8). Sigue abierto si más adelante conviene no publicar de noche cortes de 1 celda.
 3. **Negación por "no".** El muestreo con máximo 1 destinatario por red ya es regla (§2.6). Sigue abierto: que el "no" de cuentas de menos de 7 días pese 0,5 y límites de suscripciones por red y celda.
 4. **Alerta por red.** Cambiar el umbral fijo de 5 altas por hora por uno relativo al nivel normal (por ejemplo, mucho más que la mediana de los últimos 7 días) y combinarlo con "votan juntas el mismo incidente".
@@ -822,6 +831,7 @@ El usuario delegó las decisiones de seguridad endurecedoras; se aplicaron como 
 8. Preguntas: máximo 1 destinatario por `net_hash`; `incident_ask_filler_pct` bloqueada con mínimo > 0 (§2.6).
 9. Límites reconocidos por escrito: las cuentas de más de 24 h son freno de oleadas, y quien se instala en el apagón no cuenta el primer día (§2.5).
 10. Realtime = Broadcast del job, nunca `postgres_changes` (§4.2).
+11. Reparto de preguntas (decisión APROBADA 26/10/2026, §2.6): primero la celda propia `c`, luego el resto de `U(c)`, con relleno obligatorio (`incident_ask_filler_pct` > 0, falla cerrado), texto neutro, retraso de 0 a 2 min, máximo 1 por `net_hash` y exclusión de cuentas de menos de 24 h. Costo de privacidad aceptado; medir en el piloto (§9, riesgo 9).
 
 ## 13. REQUISITOS PREVIOS A IMPLEMENTAR
 
