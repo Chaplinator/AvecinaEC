@@ -1,7 +1,7 @@
 -- RLS y privilegios de profiles.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(23);
 
 insert into auth.users (id, aud, role, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'authenticated', 'authenticated', 'prof-a@example.test'),
@@ -15,6 +15,16 @@ select set_config('request.jwt.claims',
 select is((select count(*)::int from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'), 1,
   'A lee su propio profile');
 select is((select count(*)::int from public.profiles), 1, 'A no ve el profile de B (solo 1 fila visible)');
+
+-- Columnas visibles vs ocultas (el shadow limit del §7 no debe delatarse)
+select lives_ok($$select id, created_at, locale, phone_verified from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'$$,
+  'A lee sus columnas permitidas');
+select throws_ok($$select trust_score from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'$$,
+  '42501', null, 'A no puede leer trust_score');
+select throws_ok($$select is_banned from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'$$,
+  '42501', null, 'A no puede leer is_banned');
+select throws_ok($$select * from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'$$,
+  '42501', null, 'A no puede hacer select * sobre profiles');
 
 -- A intenta modificar el profile de B: RLS filtra, 0 filas afectadas
 do $$
@@ -56,7 +66,16 @@ set local role anon;
 select set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
 
 select throws_ok($$select * from public.profiles$$, '42501', null, 'anon no lee profiles');
+select throws_ok($$select id from public.profiles$$, '42501', null, 'anon no lee ni id de profiles');
 select throws_ok($$update public.profiles set locale = 'xx'$$, '42501', null, 'anon no actualiza profiles');
+
+-- ===== service_role (servidor): si lee las columnas ocultas =====
+reset role;
+set local role service_role;
+select is((select trust_score from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'), 50,
+  'service_role lee trust_score');
+select is((select is_banned from public.profiles where id = '00000000-0000-0000-0000-0000000000a1'), false,
+  'service_role lee is_banned');
 
 -- ===== Verificacion final como superusuario =====
 reset role;
