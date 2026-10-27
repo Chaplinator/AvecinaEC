@@ -36,7 +36,7 @@ vi.mock("@/lib/server/env", () => ({
   }),
 }));
 
-import { ACCESS_COOKIE, REFRESH_COOKIE, getRealDeps } from "@/lib/server/deps";
+import { ACCESS_COOKIE, REFRESH_COOKIE, getRealDeps, isRefreshTokenDead } from "@/lib/server/deps";
 import { CaptchaRequiredError, RateLimitedError, ServiceUnavailableError } from "@/lib/server/reports-handler";
 
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -98,5 +98,47 @@ describe("ensureSession (captcha en el alta anónima)", () => {
   it("si Supabase falla por otra causa responde 503", async () => {
     auth.signInAnonymously.mockResolvedValue({ data: { session: null, user: null }, error: { code: "unexpected_failure" } });
     await expect(getRealDeps().ensureSession(requestWith(), "ip", "tok")).rejects.toBeInstanceOf(ServiceUnavailableError);
+  });
+
+  describe("renovación de sesión fallida", () => {
+    const refreshFails = (status: number) =>
+      auth.refreshSession.mockResolvedValue({ data: { session: null, user: null }, error: { status } });
+
+    it("con un fallo pasajero (5xx) responde 503 y NO crea un usuario nuevo", async () => {
+      refreshFails(503);
+      const ensure = getRealDeps().ensureSession(requestWith({ [REFRESH_COOKIE]: "rt" }), "ip", "tok");
+      await expect(ensure).rejects.toBeInstanceOf(ServiceUnavailableError);
+      expect(auth.signInAnonymously).not.toHaveBeenCalled();
+      expect(sessionLimit).not.toHaveBeenCalled();
+    });
+
+    it("con límite de Supabase (429) responde 503 sin crear usuario", async () => {
+      refreshFails(429);
+      const ensure = getRealDeps().ensureSession(requestWith({ [REFRESH_COOKIE]: "rt" }), "ip", "tok");
+      await expect(ensure).rejects.toBeInstanceOf(ServiceUnavailableError);
+      expect(auth.signInAnonymously).not.toHaveBeenCalled();
+    });
+
+    it("con la sesión muerta (400) sin captcha pide captcha", async () => {
+      refreshFails(400);
+      const ensure = getRealDeps().ensureSession(requestWith({ [REFRESH_COOKIE]: "rt" }), "ip", null);
+      await expect(ensure).rejects.toBeInstanceOf(CaptchaRequiredError);
+    });
+
+    it("con la sesión muerta (400) y captcha válido crea una sesión nueva", async () => {
+      refreshFails(400);
+      const result = await getRealDeps().ensureSession(requestWith({ [REFRESH_COOKIE]: "rt" }), "ip", "tok");
+      expect(result.userId).toBe(USER);
+    });
+  });
+
+  it("isRefreshTokenDead distingue sesión muerta de fallo pasajero", () => {
+    expect(isRefreshTokenDead({ status: 400 })).toBe(true);
+    expect(isRefreshTokenDead({ status: 401 })).toBe(true);
+    expect(isRefreshTokenDead({ status: 429 })).toBe(false);
+    expect(isRefreshTokenDead({ status: 500 })).toBe(false);
+    expect(isRefreshTokenDead({ status: 0 })).toBe(false);
+    expect(isRefreshTokenDead({})).toBe(false);
+    expect(isRefreshTokenDead(null)).toBe(false);
   });
 });
