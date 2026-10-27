@@ -2,6 +2,7 @@
 export const es = {
   app: {
     name: "Avecina",
+    tagline: "Tu barrio, al tanto.",
     description: "Mira en tiempo real qué sectores están sin luz, agua o internet.",
     unofficial: "Información comunitaria, no oficial.",
     emergency: "Para emergencias llama al ECU 911.",

@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
+/* Paleta Avecina. Calma (claro) y emergencia (oscuro, ahorra batería en pantallas OLED).
+   Contrastes comprobados para texto normal (WCAG AA >= 4,5:1). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --bg: #f4efe6; /* Arena Barrio */
+  --surface: #fffdf9;
+  --fg: #1e2328; /* Grafito */
+  --muted: #5a6571; /* Gris Zona oscurecido para texto: 5,1:1 sobre Arena */
+  --line: #d8d1c4;
+  --line-strong: #8b8578;
+  --action: #2f6ab0; /* Azul Acción */
+  --on-action: #ffffff;
+  --danger: #a82f2f;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Estados del mapa. Un corte se pinta según cuánto lleva: hasta 2 h, de 2 a 4 h, más de 4 h
+     (los umbrales viven en la tabla `config`). Nunca solo color: se acompaña de tiempo y patrón (§18). */
+  --state-out-early: #f2c94c; /* Amarillo: corte reciente */
+  --state-out-mid: #f2a541; /* Ámbar Aviso: corte en curso */
+  --state-out-long: #c23b3b; /* Rojo Alerta: corte largo / emergencia real */
+  --state-flood: #1b4f9c; /* Azul inundación: siempre este color; el nivel va en gotas y texto, "no pasa carro" con contorno rojo */
+  --state-back: #217a52; /* Verde Volvió */
+  --state-none: #6f7a87; /* Gris Zona */
+  --state-follow: #3d7dca; /* Azul Señal: zona seguida */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #1d3557; /* Azul Avecina */
+    --surface: #24426b;
+    --fg: #f4efe6;
+    --muted: #c9d3e0;
+    --line: #3b5c8a;
+    --line-strong: #7f97b8;
+    --action: #7fb0ee; /* Azul Acción claro */
+    --on-action: #10203a;
+    --danger: #f48c8c;
+
+    --state-out-long: #f48c8c;
+    --state-flood: #5b9bea;
+    --state-back: #4cc48c;
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-action: var(--action);
+  --color-on-action: var(--on-action);
+  --color-danger: var(--danger);
+}
+
+/* Fuente del sistema: no se descarga nada y se ve nítida en Android de gama baja. */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif;
 }

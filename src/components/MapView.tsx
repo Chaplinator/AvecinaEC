@@ -92,7 +92,7 @@ export default function MapView({ selectedCell, onPickCell }: Props) {
         L.polygon(rings, {
           renderer,
           weight: 1,
-          color: dark ? "#94a3b8" : "#475569",
+          color: dark ? "#c9d3e0" : "#6f7a87",
           opacity: 0.3,
           fillOpacity: 0,
           interactive: false,
@@ -136,11 +136,12 @@ export default function MapView({ selectedCell, onPickCell }: Props) {
       return;
     }
     const boundary = libs.h3.cellToBoundary(selectedCell) as [number, number][];
+    const accent = window.matchMedia("(prefers-color-scheme: dark)").matches ? "#7fb0ee" : "#2f6ab0";
     const polygon = libs.L.polygon(boundary, {
       renderer: libs.renderer,
       weight: 3,
-      color: "#2563eb",
-      fillColor: "#2563eb",
+      color: accent,
+      fillColor: accent,
       fillOpacity: 0.2,
       interactive: false,
     }).addTo(map);
@@ -153,7 +154,7 @@ export default function MapView({ selectedCell, onPickCell }: Props) {
       ref={containerRef}
       role="application"
       aria-label={es.map.ariaLabel}
-      className="h-full w-full bg-zinc-100 dark:bg-zinc-900"
+      className="h-full w-full bg-surface"
     >
       {!ready && (
         <p className="p-4 text-sm" role="status">

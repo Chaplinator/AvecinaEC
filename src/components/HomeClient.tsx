@@ -101,8 +101,14 @@ export default function HomeClient() {
   return (
     <div className="flex h-dvh flex-col">
       <header className="px-4 py-3">
-        <h1 className="text-xl font-semibold">{es.app.name}</h1>
-        <p className="text-sm">{es.app.description}</p>
+        <h1>
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcSet="/avecina-logo-negativo.svg" />
+            <img src="/avecina-logo.svg" alt={es.app.name} width={152} height={48} className="h-12 w-[9.5rem]" />
+          </picture>
+        </h1>
+        <p className="mt-1 text-sm font-medium">{es.app.tagline}</p>
+        <p className="text-sm text-muted">{es.app.description}</p>
       </header>
 
       <main className="relative min-h-0 flex-1">
@@ -116,7 +122,7 @@ export default function HomeClient() {
           <button
             type="button"
             onClick={() => setReportOpen(true)}
-            className="min-h-11 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white"
+            className="min-h-11 rounded-xl bg-action px-4 py-2 text-sm font-semibold text-on-action"
           >
             {es.report.open}
           </button>
@@ -124,7 +130,7 @@ export default function HomeClient() {
             type="button"
             onClick={onUseLocation}
             disabled={status === "locating"}
-            className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="min-h-11 rounded-xl border border-line-strong px-4 py-2 text-sm font-medium disabled:opacity-60"
           >
             {es.location.use}
           </button>
@@ -132,7 +138,7 @@ export default function HomeClient() {
             <button
               type="button"
               onClick={clearCell}
-              className="min-h-11 rounded-xl border border-zinc-400 px-4 py-2 text-sm font-medium"
+              className="min-h-11 rounded-xl border border-line-strong px-4 py-2 text-sm font-medium"
             >
               {es.zone.clear}
             </button>
@@ -147,7 +153,7 @@ export default function HomeClient() {
             </button>
           )}
         </div>
-        <p className="text-xs">
+        <p className="text-xs text-muted">
           {es.app.unofficial} {es.app.emergency}
         </p>
       </section>
